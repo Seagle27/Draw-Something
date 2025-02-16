@@ -12,8 +12,10 @@ class ColorSpace(Enum):
 H_BINS = 8
 S_BINS = 4
 V_BINS = 2
-# For a standard frontal-face detector, ship with OpenCV:
-CASCADE_PATH = r"C:\BGU\Year_4\ImageProcessing\Draw-Something\data\raw\haarcascade_frontalcatface.xml"
+
+# Face Detection:
+CASCADE_FACE_DETECTOR = 'haarcascade_frontalface_default.xml'
+SCALE_FACTOR = 1.3
 
 # Offline model:
 SKIN_GMM = "data/raw/skin_gmm.joblib"
