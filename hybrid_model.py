@@ -1,6 +1,5 @@
 import numpy as np
 import cv2
-from functools import partial
 import joblib
 
 from DrawSomething import online_model, offline_model, constants, segmentation, track
@@ -19,6 +18,7 @@ def main_hybrid(skin_gmm, non_skin_gmm, video_source=0,
        d) Update non-skin hist => blend with old
     """
     face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + constants.CASCADE_FACE_DETECTOR)
+    offline_prob_lut = offline_model.build_rg_probability_lut(skin_gmm, non_skin_gmm, 256)
 
     cap = cv2.VideoCapture(video_source)
     if not cap.isOpened():
@@ -57,7 +57,6 @@ def main_hybrid(skin_gmm, non_skin_gmm, video_source=0,
 
     s_old = skin_hist.copy()
     n_old = non_hist.copy()
-    time_lst = []
     frame_counter = 0
     face_tracker = None
     face_bbox = None
@@ -65,7 +64,6 @@ def main_hybrid(skin_gmm, non_skin_gmm, video_source=0,
 
     while True:
         frame_counter = (frame_counter + 1) % 1000
-        start = time.time()
         ret, frame = cap.read()
         if not ret:
             break
@@ -78,8 +76,6 @@ def main_hybrid(skin_gmm, non_skin_gmm, video_source=0,
         if face_bbox is not None:
             x, y, w, h = face_bbox
             face_mask[y:y + h, x:x + w] = 1
-        else:
-            print(1)
 
         # 1) Build new accumulators
         s_new = np.zeros_like(s_old)
@@ -93,8 +89,7 @@ def main_hybrid(skin_gmm, non_skin_gmm, video_source=0,
         mask_online = online_model.compute_online_mask(frame_hsv, ratio_lut, threshold_hist=threshold_hist)
 
         # 4) Get mask_offline from GMM
-        mask_offline = offline_model.compute_offline_mask(frame, skin_gmm, non_skin_gmm, threshold=threshold_gmm)
-
+        mask_offline = offline_model.compute_offline_mask(frame, offline_prob_lut, threshold=threshold_gmm)
         # Combine with AND
         final_mask = cv2.bitwise_and(mask_online, mask_offline)
         # final_mask = cv2.medianBlur(final_mask, 3)
@@ -138,16 +133,12 @@ def main_hybrid(skin_gmm, non_skin_gmm, video_source=0,
         cv2.imshow("Hybrid mask", final_mask)
         cv2.imshow("Updated mask", updated_mask)
         cv2.imshow("hand mask", hand_mask)
-        end = time.time()
-        iter_time = end - start
-        time_lst.append(iter_time)
 
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
 
     cap.release()
     cv2.destroyAllWindows()
-    print(f"Average iteration time {np.mean(time_lst)}")
 
 
 if __name__ == '__main__':
