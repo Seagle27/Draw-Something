@@ -1,0 +1,8 @@
+joblib==1.2.0
+joblib==1.4.2
+matplotlib==3.7.1
+numpy==1.24.2
+opencv_contrib_python==4.11.0.86
+pandas==1.5.3
+scikit_learn==1.2.2
+ucimlrepo==0.0.7
