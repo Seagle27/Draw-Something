@@ -14,11 +14,12 @@ def main_hybrid(skin_gmm, non_skin_gmm, video_source=0,
     2) For each new frame:
        a) Face detect => update s_new
        b) Build ratio LUT => produce mask_online
-       c) Produce mask_offline from GMM => combine => final_mask
+       c) Produce mask_offline from GMM => combine => hybrid_mask
        d) Update non-skin hist => blend with old
     """
     face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + constants.CASCADE_FACE_DETECTOR)
     offline_prob_lut = offline_model.build_rg_probability_lut(skin_gmm, non_skin_gmm, 256)
+    # fgbg = cv2.createBackgroundSubtractorMOG2(detectShadows=False)
 
     cap = cv2.VideoCapture(video_source)
     if not cap.isOpened():
@@ -33,9 +34,11 @@ def main_hybrid(skin_gmm, non_skin_gmm, video_source=0,
     while not discovered_face:
         # Step A: Use first frame to prime hist
         ret, frame = cap.read()
+        frame = cv2.flip(frame, 1)
+
         if not ret:
             print("No frame for initialization!")
-            return
+            exit(1)
 
         gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
@@ -60,59 +63,39 @@ def main_hybrid(skin_gmm, non_skin_gmm, video_source=0,
     frame_counter = 0
     face_tracker = None
     face_bbox = None
-    gray_face_buffer = [None, None]
+    gray_face_buffer = [None]
 
     while True:
         frame_counter = (frame_counter + 1) % 1000
         ret, frame = cap.read()
+        frame = cv2.flip(frame, 1)
         if not ret:
             break
         frame_hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
 
         # Face detection
-        face_tracker, face_bbox = track.manage_face_detection_and_tracking(frame, frame_counter, 250, face_cascade,
+        face_tracker, face_bbox = track.manage_face_detection_and_tracking(frame, frame_counter, 50, face_cascade,
                                                                            face_tracker, face_bbox)
         face_mask = np.zeros(frame.shape[:2], dtype=np.uint8)
         if face_bbox is not None:
             x, y, w, h = face_bbox
             face_mask[y:y + h, x:x + w] = 1
 
-        # 1) Build new accumulators
-        s_new = np.zeros_like(s_old)
-        n_new = np.zeros_like(n_old)
-
-        # 2) Update s_new with face region
-        s_new = online_model.hist_update_vectorized(s_new, frame_hsv, face_mask)
-
-        # 3) Build ratio LUT => produce mask_online
+        # Build ratio LUT => produce mask_online
         ratio_lut = online_model.build_ratio_lut(s_old, n_old)
         mask_online = online_model.compute_online_mask(frame_hsv, ratio_lut, threshold_hist=threshold_hist)
 
-        # 4) Get mask_offline from GMM
+        # Get offline mask from GMM
         mask_offline = offline_model.compute_offline_mask(frame, offline_prob_lut, threshold=threshold_gmm)
         # Combine with AND
-        final_mask = cv2.bitwise_and(mask_online, mask_offline)
-        # final_mask = cv2.medianBlur(final_mask, 3)
+        hybrid_mask = cv2.bitwise_and(mask_online, mask_offline)
+        # hybrid_mask = cv2.bitwise_and(hybrid_mask, fg_frame)
+        hybrid_mask = cv2.medianBlur(hybrid_mask, 3)
 
-        # 5) Update non-skin with newly classified non-skin
-        # Convert final_mask to boolean
-        final_bool = (final_mask > 0)
-        non_skin_bool = ~final_bool
-        # But also exclude the face region from updating non-skin:
-        non_skin_bool[face_mask > 0] = False
-
-        # Make an 8-bit mask for hist_update
-        non_skin_mask = non_skin_bool.astype(np.uint8)
-        n_new = online_model.hist_update_vectorized(n_new, frame_hsv, non_skin_mask)
-
-        # 6) Exponential smoothing: 90/10
-        s_old = 0.9 * s_old + 0.1 * s_new
-        n_old = 0.9 * n_old + 0.1 * n_new
-
-        # 7) Hand segmentation:
+        # Hand segmentation:
         updated_mask, current_face_gray = segmentation.segment_hand_with_face_overlap(
             frame_bgr=frame,
-            final_skin_mask=final_mask,
+            final_skin_mask=hybrid_mask,
             face_bbox=face_bbox,
             face_buffer=gray_face_buffer,
             movement_threshold=8,  # tune
@@ -126,11 +109,14 @@ def main_hybrid(skin_gmm, non_skin_gmm, video_source=0,
         updated_mask = cv2.medianBlur(updated_mask, 3)
         hand_mask = segmentation.largest_contour_segmentation(updated_mask)
 
+        s_old, n_old = online_model.update_histograms(frame_hsv, hand_mask, 1 - hybrid_mask, s_old, n_old)
+
         # Display
         cv2.imshow("Original", frame)
-        # cv2.imshow("Offline mask", mask_offline)
-        # cv2.imshow("Online mask", mask_online)
-        cv2.imshow("Hybrid mask", final_mask)
+        cv2.imshow("Offline mask", mask_offline)
+        cv2.imshow("Online mask", mask_online)
+        # cv2.imshow("fg frame", fg_frame)
+        cv2.imshow("Hybrid mask", hybrid_mask)
         cv2.imshow("Updated mask", updated_mask)
         cv2.imshow("hand mask", hand_mask)
 
