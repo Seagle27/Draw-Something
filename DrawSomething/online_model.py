@@ -87,3 +87,17 @@ def compute_online_mask(frame_hsv, ratio_lut, threshold_hist=1.5):
     online_mask = (ratio_map > threshold_hist).astype(np.uint8) * 255
     return online_mask
 
+
+def update_histograms(frame_hsv, skin_mask, non_skin_mask, skin_hist, non_skin_hist):
+    skin_new = np.zeros((constants.H_BINS, constants.S_BINS, constants.V_BINS), dtype=np.float32)
+    non_skin_new = np.zeros((constants.H_BINS, constants.S_BINS, constants.V_BINS), dtype=np.float32)
+
+    s_new = hist_update_vectorized(skin_new, frame_hsv, skin_mask)
+
+    non_skin_mask[skin_mask > 0] = False
+    n_new = hist_update_vectorized(non_skin_new, frame_hsv, non_skin_mask)
+
+    updated_skin_hist = 0.9 * skin_hist + 0.1 * s_new
+    updated_non_skin_hist = 0.9 * non_skin_hist + 0.1 * n_new
+    return updated_skin_hist, updated_non_skin_hist
+
