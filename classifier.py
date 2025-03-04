@@ -25,11 +25,10 @@ def preprocess_and_crop(binary_mask):
     
     return resized
 
-def extract_hog_features(img_path):
+def extract_hog_features(mask):
     """
-    Extract Histogram of Oriented Gradients (HOG) features from a binary mask.
+    Extract Histogram of Oriented Gradients (HOG) features from a binary mask shaped (H, W). output shape (N, )
     """
-    mask = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
     # Ensure it's truly binary (0 or 255)
     _, mask = cv2.threshold(mask, 10, 255, cv2.THRESH_BINARY)
     
@@ -50,10 +49,10 @@ def load_data(gesture_paths, train=True):
     X, y = [], []
     suffix = "train" if train else "test"
     for gesture_name in os.listdir(gesture_paths):
-        if gesture_name != "point": continue
         set_path = os.path.join(gesture_paths, gesture_name, suffix)
         for img_name in os.listdir(set_path):
-            features = extract_hog_features(os.path.join(set_path, img_name))
+            mask = cv2.imread(os.path.join(set_path, img_name), cv2.IMREAD_GRAYSCALE)
+            features = extract_hog_features(mask)
             X.append(features)
             y.append(gesture_name)
     return np.array(X), np.array(y)
@@ -61,13 +60,12 @@ def load_data(gesture_paths, train=True):
 def train(gesture_paths):
     # Load training data
     X_train, y_train = load_data(gesture_paths, train=True)
-
     # Train SVM
     svm_model = SVC(kernel='rbf', C=1, gamma='scale')
     svm_model.fit(X_train, y_train)
     return svm_model
 
-def test(gesture_paths, model):
+def test_frames(gesture_paths, model):
     # Load testing data
     X_test, y_test = load_data(gesture_paths, train=False)
 
@@ -75,9 +73,37 @@ def test(gesture_paths, model):
     accuracy = model.score(X_test, y_test)
     print(f"Test Accuracy: {accuracy:.2f}")
 
+def test_video(video_path, model):
+    cap = cv2.VideoCapture(video_path)
+    i=0
+    while cap.isOpened():
+        i+=1
+        ret, frame = cap.read()
+        if not ret:
+            break
+        if i < 130 or (i>300 and i<530) or (i>600 and i<700) or (i>750 and i<840) or (i>900 and i<1050) or (i>1200 and i<2000): continue
+        print(i)
+        # convert to grayscale
+        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        
+        # Extract HOG features from hand mask
+        hog_features = extract_hog_features(frame).reshape(1, -1)  # Reshape for SVM
+
+        # Predict gesture
+        prediction = model.predict(hog_features)[0]
+
+        # Display prediction on frame
+        frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
+        cv2.putText(frame, prediction, (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 255, 0), 2)
+        cv2.imshow("Frame", frame)
+        if cv2.waitKey(40) & 0xFF == ord('q'):
+            break
+    cap.release()
+    cv2.destroyAllWindows()
 
 
 if __name__ == '__main__':
     gesture_paths = "data/HandGestures"
     model = train(gesture_paths)
-    test(gesture_paths, model)
+    # test_frames(gesture_paths, model)
+    test_video("records/test_mask.mp4", model)

@@ -8,7 +8,7 @@ from DrawSomething.utils import bg_and_motion
 
 
 def main_hybrid(skin_gmm, non_skin_gmm, video_source=0,
-                threshold_gmm=0.4, threshold_hist=1.5):
+                threshold_gmm=0.4, threshold_hist=1.5, save_hand_mask_video=False):
     """
     Hybrid approach:
     1) Initialize online hist from first frame face detection
@@ -67,6 +67,18 @@ def main_hybrid(skin_gmm, non_skin_gmm, video_source=0,
     face_tracker = None
     face_bbox = None
     gray_face_buffer = [None]
+
+    # Video writer setup
+    if save_hand_mask_video:
+ 
+        # Get video properties
+        frame_width = int(cap.get(3))  # Width
+        frame_height = int(cap.get(4)) # Height
+        fps = int(cap.get(cv2.CAP_PROP_FPS)) if cap.get(cv2.CAP_PROP_FPS) > 0 else 30  # Default FPS
+
+        output_source = video_source.split('.')[0] + "_mask.mp4"
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # MP4 codec
+        out = cv2.VideoWriter(output_source, fourcc, fps, (frame_width, frame_height))
 
     while True:
         frame_counter = (frame_counter + 1) % 1000
@@ -137,6 +149,14 @@ def main_hybrid(skin_gmm, non_skin_gmm, video_source=0,
         # --------------------------------------------------------------------
         hand_mask = segmentation.largest_contour_segmentation(updated_color_mask)
         hand_mask_fused = segmentation.largest_contour_segmentation(fused_mask_temp)
+        # Save to video
+        if save_hand_mask_video:
+            if hand_mask is not None and hand_mask.size > 0:
+                hand_mask = np.clip(hand_mask, 0, 255).astype(np.uint8)
+                hand_mask_bgr = cv2.cvtColor(hand_mask, cv2.COLOR_GRAY2BGR)
+                out.write(hand_mask_bgr)
+
+
         s_old, n_old = online_model.update_histograms(frame_hsv, hand_mask, 1 - hybrid_mask, s_old, n_old)
 
         # Display
@@ -157,11 +177,15 @@ def main_hybrid(skin_gmm, non_skin_gmm, video_source=0,
             break
 
     cap.release()
+    if save_hand_mask_video:
+        out.release()
     cv2.destroyAllWindows()
 
 
 if __name__ == '__main__':
     skin_gmm_model = joblib.load(constants.SKIN_GMM)
     non_skin_gmm_model = joblib.load(constants.NON_SKIN_GMM)
-    main_hybrid(skin_gmm_model, non_skin_gmm_model, video_source=0, threshold_gmm=0.4,
-                threshold_hist=1.4)
+    video_source = "records/closed_hand.mp4"
+    save_hand_mask_video = True
+    main_hybrid(skin_gmm_model, non_skin_gmm_model, video_source=video_source, threshold_gmm=0.4,
+                threshold_hist=1.4, save_hand_mask_video=save_hand_mask_video)
