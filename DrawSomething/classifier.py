@@ -4,6 +4,7 @@ import numpy as np
 from skimage.feature import hog
 from sklearn.svm import SVC
 
+
 def preprocess_and_crop(binary_mask):
     """
     1. Find bounding box around the largest contour (the hand).
@@ -25,6 +26,7 @@ def preprocess_and_crop(binary_mask):
     
     return resized
 
+
 def extract_hog_features(mask):
     """
     Extract Histogram of Oriented Gradients (HOG) features from a binary mask shaped (H, W). output shape (N, )
@@ -45,6 +47,7 @@ def extract_hog_features(mask):
                        visualize=False)
     return hog_features
 
+
 def load_data(gesture_paths, train=True):
     X, y = [], []
     suffix = "train" if train else "test"
@@ -57,6 +60,7 @@ def load_data(gesture_paths, train=True):
             y.append(gesture_name)
     return np.array(X), np.array(y)
 
+
 def train(gesture_paths):
     # Load training data
     X_train, y_train = load_data(gesture_paths, train=True)
@@ -65,6 +69,7 @@ def train(gesture_paths):
     svm_model.fit(X_train, y_train)
     return svm_model
 
+
 def test_frames(gesture_paths, model):
     # Load testing data
     X_test, y_test = load_data(gesture_paths, train=False)
@@ -72,6 +77,7 @@ def test_frames(gesture_paths, model):
     # Evaluate model
     accuracy = model.score(X_test, y_test)
     print(f"Test Accuracy: {accuracy:.2f}")
+
 
 def test_video(video_path, model):
     cap = cv2.VideoCapture(video_path)
