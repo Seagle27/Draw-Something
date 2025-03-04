@@ -49,7 +49,7 @@ def compute_offline_mask(frame_bgr, lut, threshold=0.5):
 
     # Reshape to original frame size
     skin_mask = skin_mask.reshape(h, w)
-    return skin_mask
+    return skin_mask, p_skin
 
 
 def build_rg_probability_lut(skin_gmm, non_skin_gmm, lut_size=256):

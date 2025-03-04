@@ -1,9 +1,10 @@
 import numpy as np
 import cv2
 import joblib
-
 from DrawSomething import online_model, offline_model, constants, segmentation, track
 import time
+
+from DrawSomething.utils import bg_and_motion
 
 
 def main_hybrid(skin_gmm, non_skin_gmm, video_source=0,
@@ -22,6 +23,8 @@ def main_hybrid(skin_gmm, non_skin_gmm, video_source=0,
     # fgbg = cv2.createBackgroundSubtractorMOG2(detectShadows=False)
 
     cap = cv2.VideoCapture(video_source)
+    bg_subtractor = cv2.createBackgroundSubtractorMOG2(history=200, varThreshold=8, detectShadows=True)
+    # bg_subtractor = cv2.createBackgroundSubtractorMOG2(detectShadows=False)
     if not cap.isOpened():
         print("Unable to open video source:", video_source)
         return
@@ -77,23 +80,29 @@ def main_hybrid(skin_gmm, non_skin_gmm, video_source=0,
         face_tracker, face_bbox = track.manage_face_detection_and_tracking(frame, frame_counter, 50, face_cascade,
                                                                            face_tracker, face_bbox)
         face_mask = np.zeros(frame.shape[:2], dtype=np.uint8)
+        face_mask_extended = np.zeros(frame.shape[:2], dtype=np.uint8)
         if face_bbox is not None:
             x, y, w, h = face_bbox
             face_mask[y:y + h, x:x + w] = 1
+            h_new = np.int32(h*1.5)
+            w_new = np.int32(w*1.5)
+            face_mask_extended[y:y + h_new, x:x + w_new] = 255
+        else:
+            face_mask_extended = face_mask_init
 
         # Build ratio LUT => produce mask_online
         ratio_lut = online_model.build_ratio_lut(s_old, n_old)
-        mask_online = online_model.compute_online_mask(frame_hsv, ratio_lut, threshold_hist=threshold_hist)
+        mask_online, ratio_map_online = online_model.compute_online_mask(frame_hsv, ratio_lut, threshold_hist=threshold_hist)
 
         # Get offline mask from GMM
-        mask_offline = offline_model.compute_offline_mask(frame, offline_prob_lut, threshold=threshold_gmm)
+        mask_offline, p_skin_offline = offline_model.compute_offline_mask(frame, offline_prob_lut, threshold=threshold_gmm)
         # Combine with AND
         hybrid_mask = cv2.bitwise_and(mask_online, mask_offline)
         # hybrid_mask = cv2.bitwise_and(hybrid_mask, fg_frame)
         hybrid_mask = cv2.medianBlur(hybrid_mask, 3)
 
         # Hand segmentation:
-        updated_mask, current_face_gray = segmentation.segment_hand_with_face_overlap(
+        updated_color_mask, current_face_gray = segmentation.segment_hand_with_face_overlap(
             frame_bgr=frame,
             final_skin_mask=hybrid_mask,
             face_bbox=face_bbox,
@@ -106,20 +115,44 @@ def main_hybrid(skin_gmm, non_skin_gmm, video_source=0,
 
         # update prev_face_gray
         gray_face_buffer[frame_counter % len(gray_face_buffer)] = current_face_gray
-        updated_mask = cv2.medianBlur(updated_mask, 3)
-        hand_mask = segmentation.largest_contour_segmentation(updated_mask)
+        updated_color_mask = cv2.medianBlur(updated_color_mask, 5)
 
+        # --------------------------------------------------------------------
+        fg_mask = bg_subtractor.apply(frame)#, learningRate=5e-3)
+        # Optionally smooth the fg_mask:
+        # fg_mask = cv2.medianBlur(fg_mask, 5)
+        # Use a high threshold to keep only strong motion:
+        motion_mask_high = bg_and_motion.get_high_motion_mask(fg_mask, high_thresh=70) #30
+        motion_prob = motion_mask_high.astype(np.float32)
+        fused_mask_temp, combined_prob = bg_and_motion.fuse_color_motion(ratio_map_online, p_skin_offline, motion_prob,
+                                                      w_color = 0.22, w_motion = 0.9, threshold = 0.75)
+        mask1 = cv2.bitwise_and(fused_mask_temp, hybrid_mask) #motion_mask_high
+        # mask1 = cv2.medianBlur(mask1, 5)
+        fused_mask_temp = cv2.medianBlur(fused_mask_temp,5)
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(5,5))
+        fused_mask_temp = cv2.morphologyEx(fused_mask_temp, cv2.MORPH_CLOSE,kernel)
+        hybrid_mask[face_mask_extended == 255] = 0
+        fused_mask = cv2.bitwise_or(mask1,hybrid_mask)
+
+        # --------------------------------------------------------------------
+        hand_mask = segmentation.largest_contour_segmentation(updated_color_mask)
+        hand_mask_fused = segmentation.largest_contour_segmentation(fused_mask_temp)
         s_old, n_old = online_model.update_histograms(frame_hsv, hand_mask, 1 - hybrid_mask, s_old, n_old)
 
         # Display
         cv2.imshow("Original", frame)
-        cv2.imshow("Offline mask", mask_offline)
-        cv2.imshow("Online mask", mask_online)
+        # cv2.imshow("Offline mask", mask_offline)
+        # cv2.imshow("Online mask", mask_online)
         # cv2.imshow("fg frame", fg_frame)
-        cv2.imshow("Hybrid mask", hybrid_mask)
-        cv2.imshow("Updated mask", updated_mask)
-        cv2.imshow("hand mask", hand_mask)
+        # cv2.imshow("Hybrid mask", hybrid_mask)
+        # cv2.imshow("Updated mask", updated_color_mask)
 
+        cv2.imshow("combined", hand_mask_fused)
+
+        # cv2.imshow("mask-fused_temp", motion_mask_high2)
+        # cv2.imshow("hand", hand_mask_fused)
+        # cv2.imshow("mask1", mask1)
+        # cv2.imshow("mask2", mask2)
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
 

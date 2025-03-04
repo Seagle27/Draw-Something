@@ -85,7 +85,7 @@ def compute_online_mask(frame_hsv, ratio_lut, threshold_hist=1.5):
     ratio_map = ratio_lut[h_vals, s_vals, v_vals]
     # Threshold => mask
     online_mask = (ratio_map > threshold_hist).astype(np.uint8) * 255
-    return online_mask
+    return online_mask, ratio_map
 
 
 def update_histograms(frame_hsv, skin_mask, non_skin_mask, skin_hist, non_skin_hist):
