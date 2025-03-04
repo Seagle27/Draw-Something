@@ -244,3 +244,34 @@ def hysteresis_thresholding(img, low_thresh, high_thresh):
         final = np.where((weak == 1) & (dilated == 1), 1, final)
         changed = not np.array_equal(prev, final)
     return (final * 255).astype(np.uint8)
+
+
+def get_initial_face_mask(video_source, face_cascade):
+    cap = cv2.VideoCapture(video_source)
+    print("Searching face...")
+    discovered_face = False
+    while not discovered_face:
+        # Step A: Use first frame to prime hist
+        ret, frame = cap.read()
+        frame = cv2.flip(frame, 1)
+        if not ret:
+            print("No frame for initialization!")
+            exit(1)
+
+        gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+        # Face detection
+
+        faces = face_cascade.detectMultiScale(gray_frame, scaleFactor=constants.SCALE_FACTOR, minNeighbors=5,
+                                              minSize=(50, 50))
+        if len(faces) > 0:
+            h, w = frame.shape[:2]
+            face_mask_init = np.zeros((h, w), dtype=np.uint8)
+            for (x, y, w, h) in faces:
+                face_mask_init[y:y + h, x:x + w] = 255
+                discovered_face = True
+
+    cap.release()
+    print("Face found")
+    return face_mask_init, frame
+

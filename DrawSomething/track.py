@@ -5,28 +5,24 @@ from DrawSomething import constants
 
 def manage_face_detection_and_tracking(
         frame,
-        frame_count,
-        skip_interval,
         face_cascade,
         face_tracker,
-        face_bbox
+        run_detection=False
 ):
     """
     Detect or track a face in the given frame.
 
     Args:
         frame (np.ndarray): BGR color image from the webcam or video.
-        frame_count (int): Current frame index (increment each loop).
-        skip_interval (int): How many frames to skip before re-running Haar detection.
         face_cascade (cv2.CascadeClassifier): Pre-loaded Haar face detector.
         face_tracker (cv2.legacy.Tracker or cv2.Tracker): Current face tracker, or None if not used yet.
-        face_bbox (tuple or None): Current bounding box for the face (x, y, w, h), or None.
+        run_detection: Run detection or use tracker
 
     Returns:
         (face_tracker, face_bbox): Updated tracker and bounding box.
     """
     # Decide whether to run face detection on this frame
-    run_detection = (frame_count % skip_interval == 0) or (face_tracker is None)
+    run_detection = face_tracker is None or run_detection
 
     if run_detection:
         # Convert to gray for faster/more typical Haar detection

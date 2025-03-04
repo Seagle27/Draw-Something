@@ -1,120 +1,111 @@
-import cv2
 import numpy as np
+import cv2
+import joblib
+from DrawSomething import constants, segmentation, track, face
+from DrawSomething.online_model import OnlineModel
+from DrawSomething.offline_model import OfflineModel
+from DrawSomething.utils import bg_and_motion
+
+ONLINE_THRESHOLD = 1.5
+OFFLINE_THRESHOLD = 0.4
+VIDEO_SOURCE = 0
 
 
-def find_fingertip(fg_mask, frame, H, W):
-    # 1. Find largest contour
-    contours, _ = cv2.findContours(fg_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    if not contours:
-        return None, None  # No person found
-    
-    largest_contour = max(contours, key=cv2.contourArea)
-    area = cv2.contourArea(largest_contour)
-    if area < 1000:  # or some threshold
-        return None, None  # Not a valid shape
-    
-    # 2. Convex hull and defects
-    hull_indices = cv2.convexHull(largest_contour, returnPoints=False)
-    if len(hull_indices) < 3:
-        return None, None
-    
-    hull_points = cv2.convexHull(largest_contour, returnPoints=True)
-    defects = cv2.convexityDefects(largest_contour, hull_indices)
-    
-    # 3. Centroid (palm center approx)
-    M = cv2.moments(largest_contour)
-    if M["m00"] == 0:
-        return None, None
-    cx = int(M["m10"] / M["m00"])
-    cy = int(M["m01"] / M["m00"])
-    palm_center = (cx, cy)
-    
-    # 4. Analyze hull + (optionally) defects to find the fingertip
-    fingertip_point = None
-    max_dist = -1
-    
-    if defects is not None:
-        # Optionally use defects to pick start/end points that are far from center
-        for i in range(defects.shape[0]):
-            s, e, f, d = defects[i, 0]
-            start = tuple(largest_contour[s][0])
-            end = tuple(largest_contour[e][0])
-            depth = d / 256.0
-            
-            if depth > 10:  # choose a threshold
-                for candidate in [start, end]:
-                    c_dist = (candidate[0] - cx)**2 + (candidate[1] - cy)**2
-                    if c_dist > max_dist:
-                        max_dist = c_dist
-                        fingertip_point = candidate
-    
-    # If no fingertip found from defects, fallback to just the farthest hull point
-    # if fingertip_point is None:
-    #     for pt in hull_points:
-    #         x, y = pt[0]
-    #         dist = (x - cx)**2 + (y - cy)**2
-    #         if dist > max_dist:
-    #             max_dist = dist
-    #             fingertip_point = (x, y)
-    
-    # Draw info
-    cv2.drawContours(frame, [largest_contour], -1, (0,255,0), 2)
-    cv2.circle(frame, palm_center, 5, (255, 0, 0), -1)  # palm center
-    if fingertip_point is not None:
-        cv2.circle(frame, fingertip_point, 8, (0, 0, 255), -1)
-        cv2.putText(frame, "Fingertip", (fingertip_point[0], fingertip_point[1]-10),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0,0,255), 2)
-    
-    return fingertip_point, palm_center
+def main_loop():
+    """
+    TODO: Update doc here...
+    """
+    # Init...
+    face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + constants.CASCADE_FACE_DETECTOR)
+    face_mask, frame = face.get_initial_face_mask(VIDEO_SOURCE, face_cascade)
+    bg_subtractor = cv2.createBackgroundSubtractorMOG2(history=200, varThreshold=8, detectShadows=True)
 
-def main():
-    # Open a connection to the default camera
-    cap = cv2.VideoCapture(0)
-    
-    # Create the background subtractor object
-    bg_subtractor = cv2.createBackgroundSubtractorMOG2(history=50, varThreshold=90, detectShadows=True)
+    # Create Online and Offline models:
+    online_model = OnlineModel(ONLINE_THRESHOLD, face_mask, frame)
+    offline_model = OfflineModel(OFFLINE_THRESHOLD)
 
-    bg_subtractor.setShadowThreshold(0.7)  # Lower value = stricter shadow detection (detects fewer shadows)
-    
-    # Create a kernel for morphological operations
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3,3))
-    
+    cap = cv2.VideoCapture(VIDEO_SOURCE)
+
+    # Parameters used in main loop:
+    frame_counter = 0
+    face_tracker = None
+    gray_face_buffer = [None]
+    face_mask_extended = face_mask
+
     while True:
         ret, frame = cap.read()
-        H, W = frame.shape[:2]
+        frame = cv2.flip(frame, 1)
         if not ret:
             break
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        
-        # Apply background subtraction with the chosen learning rate
-        fg_mask = bg_subtractor.apply(gray, learningRate=0.0) 
+        frame_hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
 
-        # Perform morphological operations to remove noise and fill holes
-        fg_mask = cv2.morphologyEx(fg_mask, cv2.MORPH_OPEN, kernel, iterations=1)   # remove noise
-        fg_mask = cv2.morphologyEx(fg_mask, cv2.MORPH_CLOSE, kernel, iterations=2)  # fill holes
+        # Face detection
+        face_tracker, face_bbox = track.manage_face_detection_and_tracking(frame, face_cascade, face_tracker)
+        if face_bbox is not None:
+            face_mask = np.zeros(frame.shape[:2], dtype=np.uint8)
+            face_mask_extended = np.zeros(frame.shape[:2], dtype=np.uint8)
+            x, y, w, h = face_bbox
+            face_mask[y:y + h, x:x + w] = 1
+            h_new = np.int32(h * 1.5)
+            w_new = np.int32(w * 1.5)
+            face_mask_extended[y:y + h_new, x:x + w_new] = 255
 
-        # fg_mask = cv2.medianBlur(fg_mask, 5)  # Kernel size 5 (adjust if needed)
+        # Generate Hybrid mask
+        mask_online, ratio_map_online = online_model.compute_online_mask(frame_hsv)
+        mask_offline, p_skin_offline = offline_model.compute_offline_mask(frame)
+        hybrid_mask = cv2.bitwise_and(mask_online, mask_offline)
+        hybrid_mask = cv2.medianBlur(hybrid_mask, 3)
 
-        # Find external contours in the foreground mask
-        contours, _ = cv2.findContours(fg_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        if contours:
-            # Pick the largest contour by area (likely the person)
-            max_contour = max(contours, key=cv2.contourArea)
-            if cv2.contourArea(max_contour) > 1000:  # filter out very small contours
-                x, y, w, h = cv2.boundingRect(max_contour)
-                cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
-                cv2.drawContours(frame, [max_contour], -1, (255, 0, 0), 2)
-        # fingertip, palm_center = find_fingertip(fg_mask, frame, H, W)
-        # Show the foreground mask (for debugging)
-        cv2.imshow('Foreground Mask', fg_mask)
-        cv2.imshow('Frame', frame)
-        
-        # Press 'Esc' to exit
-        if cv2.waitKey(1) & 0xFF == 27:
+        updated_color_mask, current_face_gray = segmentation.segment_hand_with_face_overlap(
+            frame_bgr=frame,
+            final_skin_mask=hybrid_mask,
+            face_bbox=face_bbox,
+            face_buffer=gray_face_buffer,
+            movement_threshold=8,  # tune
+            min_motion_area=50  # tune
+        )
+        gray_face_buffer[frame_counter % len(gray_face_buffer)] = current_face_gray
+        updated_color_mask = cv2.medianBlur(updated_color_mask, 5)
+        skin_mask = segmentation.largest_contour_segmentation(updated_color_mask)
+
+        # Probability map and motion filters:
+        # ___________________________________
+        fg_mask = bg_subtractor.apply(frame)  # , learningRate=5e-3)
+        # Optionally smooth the fg_mask:
+        # fg_mask = cv2.medianBlur(fg_mask, 5)
+        # Use a high threshold to keep only strong motion:
+        motion_mask_high = bg_and_motion.get_high_motion_mask(fg_mask, high_thresh=70)  # 30
+        motion_prob = motion_mask_high.astype(np.float32)
+        fused_mask_temp, combined_prob = bg_and_motion.fuse_color_motion(ratio_map_online, p_skin_offline, motion_prob,
+                                                                         w_color=0.22, w_motion=0.9, threshold=0.75)
+        mask1 = cv2.bitwise_and(fused_mask_temp, hybrid_mask)  # motion_mask_high
+        # mask1 = cv2.medianBlur(mask1, 5)
+        fused_mask_temp = cv2.medianBlur(fused_mask_temp, 5)
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+        fused_mask_temp = cv2.morphologyEx(fused_mask_temp, cv2.MORPH_CLOSE, kernel)
+        hybrid_mask_copy = hybrid_mask.copy()
+        hybrid_mask_copy[face_mask_extended == 255] = 0
+        fused_mask = cv2.bitwise_or(mask1, hybrid_mask_copy)
+        hand_mask_fused = segmentation.largest_contour_segmentation(fused_mask_temp)
+        # ___________________________________
+
+        # Update online model
+        non_skin_mask = cv2.bitwise_not(hybrid_mask)
+        online_model.update(frame_hsv, skin_mask, non_skin_mask)
+
+        # Display
+        cv2.imshow("Original", frame)
+        # cv2.imshow("Offline mask", mask_offline)
+        # cv2.imshow("Online mask", mask_online)
+        # cv2.imshow("Hybrid mask", hybrid_mask)
+        cv2.imshow("combined", hand_mask_fused)
+
+        if cv2.waitKey(1) & 0xFF == ord('q'):
             break
-    
+
     cap.release()
     cv2.destroyAllWindows()
 
-if __name__ == "__main__":
-    main()
+
+if __name__ == '__main__':
+    main_loop()
