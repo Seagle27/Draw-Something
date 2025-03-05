@@ -78,6 +78,30 @@ def smooth_fingertip(curr_tip, prev_tip):
     )
 
 
+def stable_detect_fingertip(mask):
+    detected_fingertip = detect_fingertip(mask)
+
+    if detected_fingertip:
+        if is_valid_fingertip(detected_fingertip, prev_fingertip):
+            # If it's a small movement, accept immediately
+            curr_fingertip = smooth_fingertip(detected_fingertip,
+                                              prev_fingertip) if prev_fingertip else detected_fingertip
+            stability_counter = 0
+            if prev_fingertip:
+                cv2.line(canvas, curr_fingertip, prev_fingertip, (0, 255, 0), thickness=4, lineType=cv2.LINE_AA,
+                         shift=0)
+
+        else:
+            stability_counter += 1  # Continue tracking if it's stable
+            cv2.putText(frame, "Big Jump", (400, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+
+            if stability_counter >= STABILITY_FRAMES:
+                curr_fingertip = detected_fingertip  # Confirm new position
+                stability_counter = 0
+
+    prev_fingertip = curr_fingertip
+
+
 def test_video(video_source, model):
     cap = cv2.VideoCapture(video_source)
     frame_width = int(cap.get(3))

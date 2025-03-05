@@ -33,7 +33,7 @@ def main_loop_wrapper():
         TODO: Update doc here...
         """
         # Init...
-        nonlocal face_cascade, face_mask, bg_subtractor, online_model, offline_model, svm_model, stabilizer, cap, \
+        nonlocal face_cascade, face_mask, bg_subtractor, online_model, offline_model, svm_model, stabilizer, \
             frame_counter, face_tracker, face_mask_extended
         frame_hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
 
