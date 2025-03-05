@@ -15,11 +15,11 @@ def preprocess_and_crop(binary_mask):
     3. Optionally resize to a fixed dimension.
     """
     # Find contours
-    contours, _ = cv2.findContours(binary_mask.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    # contours, _ = cv2.findContours(binary_mask.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
     # Largest contour => hand
-    cnt = max(contours, key=cv2.contourArea)
-    x, y, w, h = cv2.boundingRect(cnt)
+    # cnt = max(contours, key=cv2.contourArea)
+    x, y, w, h = cv2.boundingRect(binary_mask)
 
     # Crop
     cropped = binary_mask[y:y + h, x:x + w]

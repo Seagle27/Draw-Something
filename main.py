@@ -5,7 +5,7 @@ from DrawSomething import constants, segmentation, track, face
 from DrawSomething.online_model import OnlineModel
 from DrawSomething.offline_model import OfflineModel
 from DrawSomething.utils import bg_and_motion
-
+from DrawSomething.gesture_recognition import SvmModel, GestureStabilizer
 ONLINE_THRESHOLD = 1.5
 OFFLINE_THRESHOLD = 0.4
 VIDEO_SOURCE = 0
@@ -23,7 +23,8 @@ def main_loop():
     # Create Online and Offline models:
     online_model = OnlineModel(ONLINE_THRESHOLD, face_mask, frame)
     offline_model = OfflineModel(OFFLINE_THRESHOLD)
-
+    svm_model = SvmModel(constants.SVM_MODEL_PATH)
+    stabilizer = GestureStabilizer(constants.WIN_SIZE, constants.MIN_CHANGE_FRAME)
     cap = cv2.VideoCapture(VIDEO_SOURCE)
 
     # Parameters used in main loop:
@@ -87,18 +88,26 @@ def main_loop():
         hybrid_mask_copy[face_mask_extended == 255] = 0
         fused_mask = cv2.bitwise_or(mask1, hybrid_mask_copy)
         hand_mask_fused = segmentation.largest_contour_segmentation(fused_mask_temp)
-        # ___________________________________
-
         # Update online model
         non_skin_mask = cv2.bitwise_not(hybrid_mask)
         online_model.update(frame_hsv, skin_mask, non_skin_mask)
 
-        # Display
-        cv2.imshow("Original", frame)
+        # ___________________________________
+        prediction = svm_model.predict(hand_mask_fused)
+        # Update the stabilizer with the new prediction
+        stable_label = stabilizer.update(prediction)
+        # Display the stable label on the frame
+        display_frame = frame.copy()
+        cv2.putText(display_frame, f"Gesture: {stable_label}", (10, 50),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0, 255, 0), 3)
+        cv2.imshow("Gesture Prediction", display_frame)
+
+                # Display
+        # cv2.imshow("Original", frame)
         # cv2.imshow("Offline mask", mask_offline)
         # cv2.imshow("Online mask", mask_online)
         # cv2.imshow("Hybrid mask", hybrid_mask)
-        cv2.imshow("combined", hand_mask_fused)
+        # cv2.imshow("combined", hand_mask_fused)
 
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break

@@ -20,3 +20,10 @@ SCALE_FACTOR = 1.3
 # Offline model:
 SKIN_GMM = "data/raw/skin_gmm.joblib"
 NON_SKIN_GMM = "data/raw/non_skin_gmm.joblib"
+
+# SVM model:
+SVM_MODEL_PATH = "data/raw/gesture_svm_model.pkl"
+
+# gesture recognition cfg:
+WIN_SIZE = 25
+MIN_CHANGE_FRAME = 10
