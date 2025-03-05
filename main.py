@@ -10,12 +10,7 @@ ONLINE_THRESHOLD = 1.5
 OFFLINE_THRESHOLD = 0.4
 VIDEO_SOURCE = 0
 
-
-def main_loop():
-    """
-    TODO: Update doc here...
-    """
-    # Init...
+def main_loop_wrapper():
     face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + constants.CASCADE_FACE_DETECTOR)
     face_mask, frame = face.get_initial_face_mask(VIDEO_SOURCE, face_cascade)
     bg_subtractor = cv2.createBackgroundSubtractorMOG2(history=200, varThreshold=8, detectShadows=True)
@@ -25,7 +20,7 @@ def main_loop():
     offline_model = OfflineModel(OFFLINE_THRESHOLD)
     svm_model = SvmModel(constants.SVM_MODEL_PATH)
     stabilizer = GestureStabilizer(constants.WIN_SIZE, constants.MIN_CHANGE_FRAME)
-    cap = cv2.VideoCapture(VIDEO_SOURCE)
+    # cap = cv2.VideoCapture(VIDEO_SOURCE)
 
     # Parameters used in main loop:
     frame_counter = 0
@@ -33,11 +28,13 @@ def main_loop():
     gray_face_buffer = [None]
     face_mask_extended = face_mask
 
-    while True:
-        ret, frame = cap.read()
-        frame = cv2.flip(frame, 1)
-        if not ret:
-            break
+    def main_loop(frame):
+        """
+        TODO: Update doc here...
+        """
+        # Init...
+        nonlocal face_cascade, face_mask, bg_subtractor, online_model, offline_model, svm_model, stabilizer, cap, \
+            frame_counter, face_tracker, face_mask_extended
         frame_hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
 
         # Face detection
@@ -98,9 +95,12 @@ def main_loop():
         stable_label = stabilizer.update(prediction)
         # Display the stable label on the frame
         display_frame = frame.copy()
-        cv2.putText(display_frame, f"Gesture: {stable_label}", (10, 50),
-                    cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0, 255, 0), 3)
-        cv2.imshow("Gesture Prediction", display_frame)
+
+        return hand_mask_fused, stable_label
+
+        # cv2.putText(display_frame, f"Gesture: {stable_label}", (10, 50),
+        #             cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0, 255, 0), 3)
+        # cv2.imshow("Gesture Prediction", display_frame)
 
                 # Display
         # cv2.imshow("Original", frame)
@@ -109,12 +109,13 @@ def main_loop():
         # cv2.imshow("Hybrid mask", hybrid_mask)
         # cv2.imshow("combined", hand_mask_fused)
 
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
+        # if cv2.waitKey(1) & 0xFF == ord('q'):
+        #     break
 
-    cap.release()
-    cv2.destroyAllWindows()
+    # cap.release()
+    # cv2.destroyAllWindows()
+    return main_loop
 
-
-if __name__ == '__main__':
-    main_loop()
+#
+# if __name__ == '__main__':
+#     main_loop()
