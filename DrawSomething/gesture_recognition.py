@@ -68,55 +68,15 @@ class SvmModel:
         file_names = ('index_finger', 'up_thumb', 'open_hand', 'close_hand', 'three_fingers')
         gest_prediction = file_names[prediction_num - 1]
         return gest_prediction
-# Placeholder functions for demonstration:
 
-
-
-# Example usage in a main loop:
-if __name__ == '__main__':
-    # Assume 'model' is your trained SVM gesture classifier,
-    # and 'extract_features_from_frame()' is a function that extracts the features for classification.
-    import cv2
-    import numpy as np
-    import classifier as svm
-    # # hand_mask = segmentation.largest_contour_segmentation(updated_color_mask)
-    # hand_mask = segmentation.largest_contour_segmentation(fused_mask_temp)
-    # if flag_save_gest:
-    #     if hand_mask is not None and (frame_counter > 10):
-    #         # Convert from OpenCV contour format to a NumPy array of shape (N, 2)
-    #         contour_array = hand_mask  # shape => (N, 2)
-    #         all_contours.append(contour_array)
-    #     if len(all_contours) == 500:
-    #         break
-    #
-    # s_old, n_old = online_model.update_histograms(frame_hsv, hand_mask, 1 - hybrid_mask, s_old, n_old)
-
-
-
-    model = SvmModel(const.SVM_MODEL_PATH)
-
-    # Initialize the stabilizer: use 60 frames window and require 60 consistent frames for change.
-    stabilizer = GestureStabilizer(const.WIN_SIZE, const.MIN_CHANGE_FRAME)
-
-    frame_counter = 0
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            break
-
-        frame_counter += 1
-
-        prediction = model.predict(mask)
-        # Update the stabilizer with the new prediction
-        stable_label = stabilizer.update(prediction)
-        # Display the stable label on the frame
-        display_frame = frame.copy()
-        cv2.putText(display_frame, f"Gesture: {stable_label}", (10, 50),
-                    cv2.FONT_HERSHEY_SIMPLEX, 1.5, (0, 255, 0), 3)
-        cv2.imshow("Gesture Prediction", display_frame)
-
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
-
-    cap.release()
-    cv2.destroyAllWindows()
+# # hand_mask = segmentation.largest_contour_segmentation(updated_color_mask)
+# hand_mask = segmentation.largest_contour_segmentation(fused_mask_temp)
+# if flag_save_gest:
+#     if hand_mask is not None and (frame_counter > 10):
+#         # Convert from OpenCV contour format to a NumPy array of shape (N, 2)
+#         contour_array = hand_mask  # shape => (N, 2)
+#         all_contours.append(contour_array)
+#     if len(all_contours) == 500:
+#         break
+#
+# s_old, n_old = online_model.update_histograms(frame_hsv, hand_mask, 1 - hybrid_mask, s_old, n_old)
