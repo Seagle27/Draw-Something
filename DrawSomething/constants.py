@@ -25,5 +25,5 @@ NON_SKIN_GMM = "data/raw/non_skin_gmm.joblib"
 SVM_MODEL_PATH = "data/raw/gesture_svm_model.pkl"
 
 # gesture recognition cfg:
-WIN_SIZE = 25
+WIN_SIZE = 40
 MIN_CHANGE_FRAME = 10
