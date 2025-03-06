@@ -1,8 +1,6 @@
 import collections
-from DrawSomething import constants as const
-from DrawSomething import classifier as svm
+import classifier as svm
 import joblib
-import cv2
 
 
 class GestureStabilizer:
@@ -26,26 +24,36 @@ class GestureStabilizer:
         if len(self.predictions) > self.window_size:
             self.predictions.pop(0)
 
+
+
         # Compute the majority (mode) from the sliding window
         counter = collections.Counter(self.predictions)
         majority_label, majority_count = counter.most_common(1)[0]
 
-        # If no stable label yet, initialize it.
-        if self.stable_label is None:
+        if majority_count >= self.window_size // 4:
             self.stable_label = majority_label
-            self.frames_since_change = 0
-        else:
-            if majority_label != self.stable_label:
-                self.frames_since_change += 1
-                # If the new majority persists for enough frames, update stable label.
-                if self.frames_since_change >= self.min_change_frames:
-                    self.stable_label = majority_label
-                    self.frames_since_change = 0
-            else:
-                # If majority equals the current stable label, reset the counter.
-                self.frames_since_change = 0
+            return majority_label
+        elif majority_count >= self.window_size // 6 and self.stable_label==majority_label:
+            return majority_label
+        self.stable_label=None
+        return None
 
-        return self.stable_label
+        # # If no stable label yet, initialize it.
+        # if self.stable_label is None:
+        #     self.stable_label = majority_label
+        #     self.frames_since_change = 0
+        # else:
+        #     if majority_label != self.stable_label:
+        #         self.frames_since_change += 1
+        #         # If the new majority persists for enough frames, update stable label.
+        #         if self.frames_since_change >= self.min_change_frames:
+        #             self.stable_label = majority_label
+        #             self.frames_since_change = 0
+        #     else:
+        #         # If majority equals the current stable label, reset the counter.
+        #         self.frames_since_change = 0
+
+        # return self.stable_label
 
 
 class SvmModel:

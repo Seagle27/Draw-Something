@@ -49,6 +49,7 @@ def main_loop():
     cap = cv2.VideoCapture(VIDEO_SOURCE)
     segmentation_handler = HandSegmentation(cap)
 
+
     while True:
         ret, frame = cap.read()
         if not ret:
