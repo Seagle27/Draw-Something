@@ -55,14 +55,14 @@ def main_loop():
         if not ret:
             break
         frame = cv2.flip(frame, 1)
-        hybrid_mask, motion_mask, fg_mask, final_mask, final_hand_mask = segmentation_handler.proc_frame(frame)
+        final_hand_mask = segmentation_handler.proc_frame(frame)
 
         # Display
         cv2.imshow("Original", frame)
-        cv2.imshow("Hybrid mask", hybrid_mask)
-        cv2.imshow("Final mask", final_mask)
         cv2.imshow("Hand mask", final_hand_mask)
-        cv2.imshow("Motion mask", motion_mask)
+        # cv2.imshow("Hybrid mask", hybrid_mask)
+        # cv2.imshow("Final mask", final_mask)
+        # cv2.imshow("Motion mask", motion_mask)
         # Display
         # cv2.imshow("fg_mask", fg_mask)
         # cv2.imshow("combined", combined_mask)
