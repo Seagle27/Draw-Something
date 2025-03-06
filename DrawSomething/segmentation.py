@@ -22,7 +22,7 @@ class HandSegmentation:
         fg = self.background_subtraction(frame)
 
         non_skin = cv2.bitwise_not(cv2.bitwise_and(fg, offline_mask))
-        cv2.imshow('not skin init', non_skin)
+        # cv2.imshow('not skin init', non_skin)
         self.online_model = OnlineModel(ONLINE_THRESHOLD, self.face_mask, non_skin, frame)
         self.face_tracker = None
         self.gray_face_buffer = []
@@ -110,7 +110,8 @@ class HandSegmentation:
         final_mask = cv2.bitwise_or(face_area_mask, not_face_area_mask)
         final_mask = cv2.medianBlur(final_mask, 5)
         final_hand_mask = self.largest_contour_segmentation(final_mask)
-        return hybrid_mask, motion_mask, fg_mask, final_mask, final_hand_mask
+        # return hybrid_mask, motion_mask, fg_mask, final_mask, final_hand_mask
+        return final_hand_mask
 
         # Probability map and motion filters:
         # # ___________________________________
