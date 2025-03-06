@@ -100,6 +100,9 @@ class DrawingApp:
         # ---------
         self.root = root
         self.root.title("Shape Smoothing & Best-Fit Correction")
+        self.screen_width = root.winfo_screenwidth()
+        self.screen_height = root.winfo_screenheight()
+        self.root.geometry(f"{self.screen_width // 2}x{self.screen_height}+0+0")
 
         # ---------
         # Video
@@ -433,10 +436,12 @@ class DrawingApp:
                 self.on_hand_close()
             elif self.current_gesture == "up_thumb":
                 self.on_hand_close()
-                self.on_hand_thumbsup()
+                #self.on_hand_thumbsup()
+                self.on_hand_open()
             elif self.current_gesture == "open_hand":
                 self.on_hand_close()
-                self.on_hand_open()
+                self.on_hand_thumbsup()
+                #self.on_hand_open()
             else:
                 if self.current_gesture == "index_finger":
                     # x, y = self.find_fingertip(mask_frame)
@@ -478,6 +483,27 @@ class DrawingApp:
                 color_bgr = self.color_options[list(self.current_color.keys())[0]]
                 cv2.polylines(frame_gui, [pts], isClosed=False, color=color_bgr, thickness=self.current_width)
 
+        # # Set the Tkinter window geometry to half of the screen width:
+        # frame_height, frame_width = self.frame_height, self.frame_width
+        #
+        # # Calculate a scaling factor (only scale down, do not scale up)
+        # scale_factor = min(1, min(self.screen_width//2 / frame_width, self.screen_height / frame_height))
+        # new_width = int(frame_width * scale_factor)
+        # new_height = int(frame_height * scale_factor)
+        #
+        # # Resize only if needed
+        # if scale_factor < 1:
+        #     resized_frame = cv2.resize(frame, (new_width, new_height), interpolation=cv2.INTER_AREA)
+        # else:
+        #     resized_frame = frame
+        #
+        #
+        # cv2.namedWindow("GUI - DrawSomething Game", cv2.WINDOW_NORMAL)
+        #
+        # cv2.resizeWindow("GUI - DrawSomething Game", resized_frame)
+        # # Position it to the right of the Tkinter window
+        # cv2.moveWindow("GUI - DrawSomething Game", self.screen_width // 2, 0)
+        #
         cv2.imshow('GUI - DrawSomething Game', frame_gui)
         self.root.after(1, self.update_frame)
 
@@ -576,7 +602,7 @@ class DrawingApp:
 
     def on_hand_open(self):
         if self.prev_gesture != self.current_gesture:
-            #print("Undo...")
+            print("Undo...")
             self.canvas.delete("all")
 
             # Mark one more stroke as abstracted
@@ -629,45 +655,45 @@ class DrawingApp:
 
     def on_hand_thumbsup(self):
         #print(f"self.prev_drawn_strokes:{self.prev_drawn_strokes},self.drawn_strokes:{self.drawn_strokes}")
-        if self.prev_drawn_strokes != self.drawn_strokes:
-            print("Smoothing the shapes...")
-            #print(f"self.drawn_strokes: {self.drawn_strokes}")
+        #if self.prev_drawn_strokes != self.drawn_strokes:
+        print("Smoothing the shapes...")
+        #print(f"self.drawn_strokes: {self.drawn_strokes}")
 
-            self.canvas.delete("all")
-            for stroke in self.drawn_strokes:
-                points = stroke["points"]
-                color = stroke["color"]
-                width = stroke["width"]
-                eraser_mode = stroke["eraser"]
+        self.canvas.delete("all")
+        for stroke in self.drawn_strokes:
+            points = stroke["points"]
+            color = stroke["color"]
+            width = stroke["width"]
+            eraser_mode = stroke["eraser"]
 
-                if eraser_mode:
-                    self.draw_freehand(points, "white", width=20)
+            if eraser_mode:
+                self.draw_freehand(points, "white", width=20)
+            else:
+                # Smooth the stroke.
+                smoothed = self.chaikin_smoothing(points, iterations=2)
+                if stroke.get("abstracted", False):
+                    # Already marked as abstract → draw freehand.
+                    self.draw_freehand(smoothed, color)
                 else:
-                    # Smooth the stroke.
-                    smoothed = self.chaikin_smoothing(points, iterations=2)
-                    if stroke.get("abstracted", False):
-                        # Already marked as abstract → draw freehand.
-                        self.draw_freehand(smoothed, color)
-                    else:
-                        # Process with best-fit detection.
-                        shape, angle, aligned_edge = self.best_fit_shape(smoothed)
-                        # Added
-                        stroke["shape"] = shape
-                        stroke["angle"] = angle
-                        stroke["aligned_edge"] = aligned_edge
+                    # Process with best-fit detection.
+                    shape, angle, aligned_edge = self.best_fit_shape(smoothed)
+                    # Added
+                    stroke["shape"] = shape
+                    stroke["angle"] = angle
+                    stroke["aligned_edge"] = aligned_edge
 
-                        if shape == "line":
-                            self.draw_line(smoothed, color,width)
-                        elif shape == "circle":
-                            self.draw_circle(smoothed, color,width)
-                        elif shape == "ellipse":
-                            self.draw_ellipse(smoothed, color, angle,width)
-                        elif shape == "rectangle":
-                            self.draw_rectangle(smoothed, color, angle,width)
-                        elif shape == "triangle":
-                            self.draw_triangle(smoothed, aligned_edge, color, angle,width)
-                        else:
-                            self.draw_freehand(smoothed, color,width)
+                    if shape == "line":
+                        self.draw_line(smoothed, color,width)
+                    elif shape == "circle":
+                        self.draw_circle(smoothed, color,width)
+                    elif shape == "ellipse":
+                        self.draw_ellipse(smoothed, color, angle,width)
+                    elif shape == "rectangle":
+                        self.draw_rectangle(smoothed, color, angle,width)
+                    elif shape == "triangle":
+                        self.draw_triangle(smoothed, aligned_edge, color, angle,width)
+                    else:
+                        self.draw_freehand(smoothed, color,width)
 
     # ---------------------
     # Smoothing (Chaikin)
@@ -1787,6 +1813,7 @@ class DrawingApp:
 
 def run():
     root = tk.Tk()
+
     #root.withdraw()  # Hide the Tkinter window
     app = DrawingApp(root)
     root.mainloop()
