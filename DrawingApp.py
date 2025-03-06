@@ -13,12 +13,76 @@ from classifier import extract_hog_features, train
 # constants for fingertip detection
 # Threshold for detecting a "jump" (in pixels)
 JUMP_THRESHOLD = 50  # Adjust this value as needed
-STABILITY_FRAMES = 30  # Number of frames needed to accept a new position
+STABILITY_FRAMES = 12 #30  # Number of frames needed to accept a new position
 EMA_ALPHA_MIN = 0.25  # Minimum smoothing factor (very smooth, slow response)
 EMA_ALPHA_MAX = 0.9  # Maximum smoothing factor (fast response)
 SPEED_THRESHOLD_LOW = 10   # Movement speed below this uses max smoothing
 SPEED_THRESHOLD_HIGH = 30  # Movement speed above this uses min smoothing
 
+
+def apply_brush_mask(brush_png_path, main_img, center_x, center_y, type="black",invert=True, threshold=128):
+    """
+    Applies a brush mask from a PNG image onto a main image.
+
+    The function:
+      - Loads the brush PNG image in grayscale.
+      - Thresholds it to create a binary mask.
+      - Resizes the mask to 60x60.
+      - Overlays the mask onto the main_img at the given (center_x, center_y)
+        position such that the pixels corresponding to the mask's white area (255)
+        are set to black in the main image.
+
+    Parameters:
+      brush_png_path (str): Path to the brush/eraser PNG image.
+      main_img (numpy.ndarray): Main image (cv2 image) where the mask will be applied.
+      center_x (int): X-coordinate of the center for mask placement.
+      center_y (int): Y-coordinate of the center for mask placement.
+      threshold (int): Threshold value for binarization (default is 128).
+
+    Returns:
+      numpy.ndarray: The modified main image with the mask applied.
+    """
+    # 1. Load the brush image in grayscale
+    brush_gray = cv2.imread(brush_png_path, cv2.IMREAD_GRAYSCALE)
+    if brush_gray is None:
+        raise ValueError(f"Could not load brush image from: {brush_png_path}")
+
+    # 2. Create a binary mask by thresholding
+    # Pixels >= threshold become 255, below become 0.
+    _, mask = cv2.threshold(brush_gray, threshold, 255, cv2.THRESH_BINARY)
+
+    # 3. Resize the mask to 60x60
+    mask_60 = cv2.resize(mask, (45, 45), interpolation=cv2.INTER_AREA)
+
+    # 4. Calculate the region of interest (ROI) in the main image
+    mask_h, mask_w = mask_60.shape  # should be 60x60 - i changed to 45
+    half_h, half_w = mask_h // 2, mask_w // 2
+
+    # Compute the ROI coordinates while ensuring they stay within the main image bounds.
+    y1 = max(0, center_y - half_h)
+    y2 = min(main_img.shape[0], center_y + half_h)
+    x1 = max(0, center_x - half_w)
+    x2 = min(main_img.shape[1], center_x + half_w)
+
+    # Adjust the mask region if the ROI is clipped (at the image boundaries)
+    mask_y1 = half_h - (center_y - y1)
+    mask_y2 = mask_y1 + (y2 - y1)
+    mask_x1 = half_w - (center_x - x1)
+    mask_x2 = mask_x1 + (x2 - x1)
+
+    # 5. Apply the mask: set ROI pixels to black where mask value is 255.
+    complementary_mask = cv2.bitwise_not(mask_60)
+    roi = main_img[y1:y2, x1:x2]
+    mask = mask_60
+    if invert:
+        mask = complementary_mask
+    if type=="black":
+        roi[mask[mask_y1:mask_y2, mask_x1:mask_x2] == 255] = (0, 0, 0)
+    if type=="white":
+        roi[mask[mask_y1:mask_y2, mask_x1:mask_x2] == 255] = (255, 255, 255)
+
+    # 6. Return the modified image (still in cv2/NumPy format)
+    return main_img
 
 class DrawingApp:
     # ---------------------
@@ -44,16 +108,17 @@ class DrawingApp:
         #self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
 
         self.fingertip_down = False  # State flag to know if "pressed" - not sure if needed
-        self.root.after(10, self.update_frame)  # Start an update loop every 10ms
+        self.root.after(1, self.update_frame)  # Start an update loop every 10ms
+        #self.root.after_idle(self.update_frame)
 
         # ---------
         # Gestures
         # ---------
         # Flags for short Gestures:
         #self.hand_close = False    # not sure if needed
-        self.hand_open = False      # short gesture (only apply once)
-        self.hand_thumbsup = False  # short gesture (only apply once)
-        self.hand_3fingers = False  # short gesture (turn off after finding x,y of color)
+        #self.hand_open = False      # short gesture (only apply once)
+        #self.hand_thumbsup = False  # short gesture (only apply once)
+        #self.hand_3fingers = False  # short gesture (turn off after finding x,y of color)
 
         self.current_gesture = "index_finger" # can be: index_finger,up_thumb,open_hand,close_hand,three_fingers
         self.prev_gesture = "close_hand"
@@ -82,8 +147,14 @@ class DrawingApp:
         self.y = 30
         #self.radius = 30
         self.radius = 20
+        self.radius_of_selected = 30
         #self.spacing = 120
         self.spacing = 80
+
+        #self.brush_white_icon = "GUI_photos/mask_brush_white.npy"
+        self.brush_black_icon = "GUI_photos/brush_black.png"
+        self.eraser_black_icon = "GUI_photos/eraser_black.png"
+        self.eraser_white_icon = "GUI_photos/eraser_white.png"
 
         # ---------
         # Width Bar
@@ -91,7 +162,7 @@ class DrawingApp:
         self.width_options = [2, 4, 8, 12]
         # start position of width bar
         #self.start_y = 160
-        self.start_y = 150
+        self.start_y = 110
         #self.x = 40
         self.x = 30
 
@@ -103,12 +174,17 @@ class DrawingApp:
         # Store all completed strokes here
         # Each element: {"points": [...], "color": str, "eraser": bool}
         self.drawn_strokes = []
+        self.drawn_strokes_gui = []
         self.prev_drawn_strokes = []
         self.all_strokes = []
-        self.eraser_radius = 20 # for gui eraser
+        self.eraser_radius = 5 # the radius of the eraser (not the button)
 
         # Temporary list for the current stroke
         self.current_points = []
+        # fingertip detection
+        self.stability_counter = 0
+        self.fingertip_history = []  # To store recent fingertip positions for median filtering
+        self.history_max_length = 1  # Maximum history length
         self.curr_fingertip = None
         self.prev_fingertip = None
 
@@ -118,18 +194,12 @@ class DrawingApp:
         self.clear_button = {}  # will be next to eraser
         self.width_circles = []
         self.set_positions_dict()
-        #self.is_selecting_color = False     # not sure if needed
-        #self.is_selecting_width = False     # not sure if needed
-        #self.is_selecting_eraser = False    # not sure if needed
+
 
         # Create main canvas
         self.canvas = tk.Canvas(self.root, bg="white", width=800, height=600)
         self.canvas.pack(fill=tk.BOTH, expand=True)
 
-        # Bind Ctrl+S for smoothing & correction
-        #self.root.bind("<Control-s>", self.on_ctrl_s)
-        # Bind Ctrl+U for undoing detection and drawing abstract shape
-        #self.root.bind("<Control-u>", self.on_ctrl_u)
 
     # ---------------------
     # Buttons functions
@@ -186,6 +256,7 @@ class DrawingApp:
     def clear_all_drawings(self):
         self.canvas.delete("all")
         self.drawn_strokes.clear()
+        self.drawn_strokes_gui.clear()
         self.all_strokes.clear()
 
     def activate_eraser(self):
@@ -199,57 +270,50 @@ class DrawingApp:
     # Video and Hand functions
     # ---------------------
 
-    def find_fingertip(self, frame):
-        # If frame (mask_frame) is already grayscale, no need to convert
-        gray = frame  # Just use it directly
-
-        # Threshold to ensure binary (maybe it's already binary, but okay to redo)
-        _, thresh = cv2.threshold(gray, 127, 255, cv2.THRESH_BINARY)
-
-        # Find contours
-        contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        if not contours:
-            return None, None
-
-        # Choose the largest contour (assuming it's the hand)
-        max_contour = max(contours, key=cv2.contourArea)
-
-        # Example: take the topmost point of that contour as "fingertip"
-        topmost = tuple(max_contour[max_contour[:, :, 1].argmin()][0])
-        return topmost[0], topmost[1]
-
     def draw_color_buttons_on_frame(self, frame):
         # Draw colored circles using the colors from the dictionary
         x = self.start_x
         colors = self.color_options
 
         for color_key,color_value in colors.items():
-            cv2.circle(frame, (x, self.y), self.radius, color_value, -1)
+            radius = self.radius
+            if list(self.current_color.keys())[0]==color_key and self.eraser_mode == False:
+                radius = self.radius_of_selected
+            cv2.circle(frame, (x, self.y), radius, color_value, -1)
+            if color_key == "black":
+                frame = apply_brush_mask(self.brush_black_icon, frame, x, self.y,type="white", threshold=128)
+            else:
+                frame = apply_brush_mask(self.brush_black_icon, frame, x, self.y,type="black", threshold=128)
+
             x += self.spacing
 
         # Draw an additional gray circle for the eraser button
+        radius = self.radius
+        if self.eraser_mode == True:
+            radius = self.radius_of_selected
         gray = (128, 128, 128)
-        cv2.circle(frame, (x, self.y), self.radius, gray, -1)
-
+        cv2.circle(frame, (x, self.y), radius, gray, -1)
+        frame = apply_brush_mask(self.eraser_black_icon, frame, x, self.y, type="white", invert=False, threshold=128)
+        frame = apply_brush_mask(self.eraser_white_icon, frame, x, self.y, type="black",invert=True, threshold=240)
         # Define text properties
         font = cv2.FONT_HERSHEY_SIMPLEX
-        font_scale = 0.3
+        font_scale = 0.5
         thickness = 1
         text_color = (255, 255, 255)
 
         # Prepare first line "eraser"
-        text1 = "eraser"
-        text_size1, _ = cv2.getTextSize(text1, font, font_scale, thickness)
-        text_x1 = x - text_size1[0] // 2
-        text_y1 = self.y - 5
-        cv2.putText(frame, text1, (text_x1, text_y1), font, font_scale, text_color, thickness, cv2.LINE_AA)
+        #text1 = "eraser"
+        #text_size1, _ = cv2.getTextSize(text1, font, font_scale, thickness)
+        #text_x1 = x - text_size1[0] // 2
+        #text_y1 = self.y - 5
+        #cv2.putText(frame, text1, (text_x1, text_y1), font, font_scale, text_color, thickness, cv2.LINE_AA)
 
         # Prepare second line "button"
-        text2 = "button"
-        text_size2, _ = cv2.getTextSize(text2, font, font_scale, thickness)
-        text_x2 = x - text_size2[0] // 2
-        text_y2 = self.y + 15
-        cv2.putText(frame, text2, (text_x2, text_y2), font, font_scale, text_color, thickness, cv2.LINE_AA)
+        #text2 = "button"
+        #text_size2, _ = cv2.getTextSize(text2, font, font_scale, thickness)
+        #text_x2 = x - text_size2[0] // 2
+        #text_y2 = self.y + 15
+        #cv2.putText(frame, text2, (text_x2, text_y2), font, font_scale, text_color, thickness, cv2.LINE_AA)
 
         # clear button
         x += self.spacing
@@ -262,7 +326,7 @@ class DrawingApp:
         text3 = "clear"
         text_size3, _ = cv2.getTextSize(text3, font, font_scale, thickness)
         text_x3 = x - text_size3[0] // 2
-        cv2.putText(frame, text3, (text_x3, self.y), font, font_scale, text_color, thickness, cv2.LINE_AA)
+        cv2.putText(frame, text3, (text_x3, self.y+5), font, font_scale, text_color, thickness, cv2.LINE_AA)
 
     def draw_width_buttons_on_frame(self, frame):
         # Starting coordinates for the buttons
@@ -271,9 +335,12 @@ class DrawingApp:
 
         # Loop through each width option in the list
         for line_width in self.width_options:
+            radius = self.radius
+            if self.current_width == line_width:
+                radius = self.radius_of_selected
             # Draw a filled circle as a button background
             circle_color = (200, 200, 200)
-            cv2.circle(frame, (x, y), self.radius, circle_color, -1)
+            cv2.circle(frame, (x, y), radius, circle_color, -1)
 
             # Draw a horizontal line inside the circle with the specified width
             margin = 10  # margin from the circle's edge
@@ -324,9 +391,17 @@ class DrawingApp:
 
         print(f"self.width_circles:{self.width_circles}")
 
-
     def print_gesture_on_frame(self, frame, gesture="no gesture"):
-        text = f"Gesture Detected: {gesture}"
+        text = f"Detected Gesture: {gesture}"
+        # height, width = frame.shape[:2]
+        font = cv2.FONT_HERSHEY_SIMPLEX  # Use a valid OpenCV font constant
+        font_scale = 0.65  # Define a font scale (adjust as needed)
+        thickness = 1
+        text_color = (255, 255, 255)
+        cv2.putText(frame, text, (40, 440), font, font_scale, text_color, thickness, cv2.LINE_AA)
+
+    def print_color_on_frame(self, frame):
+        text = f"Detected Color: {list(self.current_color.keys())[0]}"
         # height, width = frame.shape[:2]
         font = cv2.FONT_HERSHEY_SIMPLEX  # Use a valid OpenCV font constant
         font_scale = 0.65  # Define a font scale (adjust as needed)
@@ -346,13 +421,14 @@ class DrawingApp:
         frame = cv2.flip(frame, 1)
 
         mask_frame, gesture_name = self.mask_func(frame)
-        cv2.imshow('hand mask', mask_frame)
+        #cv2.imshow('hand mask', mask_frame)
         frame_gui = frame.copy()
 
         self.update_gesture(gesture_name)
         self.draw_color_buttons_on_frame(frame_gui)
         self.draw_width_buttons_on_frame(frame_gui)
         self.print_gesture_on_frame(frame_gui, gesture_name)
+        self.print_color_on_frame(frame_gui)
 
         if ret:
             if self.current_gesture == "close_hand":
@@ -364,36 +440,38 @@ class DrawingApp:
                 self.on_hand_close()
                 self.on_hand_open()
             else:
-                #x, y = self.find_fingertip(mask_frame)
-                # Alon's Algorithm
-                self.stable_detect_fingertip(mask_frame)
-                x,y = self.curr_fingertip[0],self.curr_fingertip[1]
                 if self.current_gesture == "index_finger":
+                    # x, y = self.find_fingertip(mask_frame)
+                    # Alon's Algorithm
+                    self.stable_detect_fingertip(mask_frame)
+                    x, y = self.curr_fingertip[0], self.curr_fingertip[1]
                     if x is not None and y is not None:
-                        if y < 70 and x > 5:
-                            self.check_color_button_click(x, y)
-                            print(
-                                f"1: current color: {self.current_color}, current width: {self.current_width}, eraser mode: {self.eraser_mode}")
-                        elif x < 70 and y > 80:
-                            self.check_width_button_click(x,y)
-                            print(
-                                f"2: current color: {self.current_color}, current width: {self.current_width}, eraser mode: {self.eraser_mode}")
+                        #if y < 70 and x > 5:
+                        #    self.check_color_button_click(x, y)
+                        #    print(
+                        #        f"1: current color: {self.current_color}, current width: {self.current_width}, eraser mode: {self.eraser_mode}")
+                        #elif x < 70 and y > 80:
+                        #    self.check_width_button_click(x,y)
+                        #    print(
+                        #        f"2: current color: {self.current_color}, current width: {self.current_width}, eraser mode: {self.eraser_mode}")
                         if not self.fingertip_down:
                             self.fingertip_down = True
                             self.current_points = [(float(x), float(y))]
                         else:
                             frame_gui = self.on_index_finger(x, y, frame_gui)
                 elif self.current_gesture == "three_fingers":
+                    pos_x , pos_y = self.find_fingertip(mask_frame)
                     self.on_hand_close()
-                    self.on_hand_3fingers(x, y)
+                    self.on_hand_3fingers(pos_x, pos_y)
                 else:
                     print("error - None gesture")
 
         # --- CHANGED BLOCK: Draw all *completed* strokes on frame_gui ---
-        for stroke in self.drawn_strokes:
+        for stroke in self.drawn_strokes_gui:
             pts = np.array(stroke["points"], dtype=np.int32).reshape((-1, 1, 2))
             color_bgr = self.color_options[stroke["color"]]  # e.g., (0,0,255) for red
             cv2.polylines(frame_gui, [pts], isClosed=False, color=color_bgr, thickness=stroke["width"])
+
 
         # Draw ONLY the current stroke if gesture == "index_finger"
         if self.current_gesture == "index_finger" and len(self.current_points) > 1:
@@ -402,14 +480,18 @@ class DrawingApp:
                 color_bgr = self.color_options[list(self.current_color.keys())[0]]
                 cv2.polylines(frame_gui, [pts], isClosed=False, color=color_bgr, thickness=self.current_width)
 
-        cv2.imshow('Camera with Circles', frame_gui)
+        cv2.imshow('GUI - DrawSomething Game', frame_gui)
         self.root.after(1, self.update_frame)
+
 
     # ---------------------
     # Gesture Event Handlers
     # ---------------------
 
     def on_hand_close(self):
+        self.fingertip_history = []
+        self.curr_fingertip = None
+        self.prev_fingertip = None
         self.fingertip_down = False
         if len(self.current_points)>1:
             self.prev_drawn_strokes = self.drawn_strokes
@@ -421,6 +503,12 @@ class DrawingApp:
                 "abstracted": False
             }
             self.drawn_strokes.append(stroke_data)
+            stroke_data_gui = {
+                "points": self.current_points[:],
+                "color": list(self.current_color.keys())[0],
+                "width": self.current_width,
+            }
+            self.drawn_strokes_gui.append(stroke_data_gui)
         #print(len(self.drawn_strokes))
         self.current_points = []
 
@@ -533,6 +621,7 @@ class DrawingApp:
                             self.draw_freehand(smoothed, color,width)
 
     def on_hand_thumbsup(self):
+        print(f"self.prev_drawn_strokes:{self.prev_drawn_strokes},self.drawn_strokes:{self.drawn_strokes}")
         if self.prev_drawn_strokes != self.drawn_strokes:
             print("Smoothing the shapes...")
             print(f"self.drawn_strokes: {self.drawn_strokes}")
@@ -607,9 +696,75 @@ class DrawingApp:
     # ---------------------
     # Helper functions
     # ---------------------
+
+    # def segment_points(self, threshold=80):
+    #     segments = []
+    #     strokes = []
+    #     for stroke in self.drawn_strokes_gui:
+    #         pts = stroke["points"]
+    #         if pts:
+    #             current_segment = [pts[0]]
+    #             for i in range(1, len(pts)):
+    #                 # If the distance between consecutive points exceeds the threshold, start a new segment
+    #                 if math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]) > threshold:
+    #                     segments.append(current_segment)
+    #                     current_segment = [pts[i]]
+    #                 else:
+    #                     current_segment.append(pts[i])
+    #             stroke_data_new = {
+    #                 "points": current_segment,
+    #                 "color": stroke["color"],
+    #                 "width": stroke["width"]
+    #             }
+    #             segments.append(stroke_data_new)
+    #     self.drawn_strokes_gui = segments
+
+    def segment_points(self, threshold=100):
+        new_strokes = []
+        for stroke in self.drawn_strokes_gui:
+            pts = stroke["points"]
+            if pts:
+                segments = []
+                current_segment = [pts[0]]
+                for i in range(1, len(pts)):
+                    if math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]) > threshold:
+                        segments.append(current_segment)
+                        current_segment = [pts[i]]
+                    else:
+                        current_segment.append(pts[i])
+                segments.append(current_segment)
+                for seg in segments:
+                    if seg:  # Ensure the segment is not empty
+                        new_stroke = {
+                            "points": seg,
+                            "color": stroke["color"],
+                            "width": stroke["width"]
+                        }
+                        new_strokes.append(new_stroke)
+        self.drawn_strokes_gui = new_strokes
+
     # --------------------
     # fingertip detection
     # --------------------
+    # simple function
+    def find_fingertip(self, frame):
+        # If frame (mask_frame) is already grayscale, no need to convert
+        gray = frame  # Just use it directly
+
+        # Threshold to ensure binary (maybe it's already binary, but okay to redo)
+        _, thresh = cv2.threshold(gray, 127, 255, cv2.THRESH_BINARY)
+
+        # Find contours
+        contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        if not contours:
+            return None, None
+
+        # Choose the largest contour (assuming it's the hand)
+        max_contour = max(contours, key=cv2.contourArea)
+
+        # Example: take the topmost point of that contour as "fingertip"
+        topmost = tuple(max_contour[max_contour[:, :, 1].argmin()][0])
+        return topmost[0], topmost[1]
 
     def detect_fingertip(self, mask):
         """Detects the most probable fingertip from a binary hand mask using convex hull."""
@@ -678,45 +833,66 @@ class DrawingApp:
         )
 
     def stable_detect_fingertip(self, mask):
-        self.curr_fingertip = self.detect_fingertip(mask)
-
-        if self.curr_fingertip:
-            if self.is_valid_fingertip(self.curr_fingertip, self.prev_fingertip):
-                # If it's a small movement, accept immediately
-                self.curr_fingertip = self.smooth_fingertip(self.curr_fingertip,
-                                                  self.prev_fingertip) if self.prev_fingertip else self.curr_fingertip
-                stability_counter = 0
-                #if prev_fingertip:
-                #    cv2.line(frame, curr_fingertip, prev_fingertip, (0, 255, 0), thickness=4, lineType=cv2.LINE_AA,
-                #             shift=0)
-
+        x,y = self.find_fingertip(mask)
+        new_tip = (x,y)
+        #new_tip = self.detect_fingertip(mask)
+        if new_tip is not None:
+            print("Detected new tip:", new_tip)
+            if self.prev_fingertip is None or self.is_valid_fingertip(new_tip, self.prev_fingertip):
+                new_tip = self.smooth_fingertip(new_tip, self.prev_fingertip) if self.prev_fingertip else new_tip
+                self.stability_counter = 0
+                print("Valid tip. Smoothed tip:", new_tip)
             else:
-                stability_counter += 1  # Continue tracking if it's stable
-                print("Big Jump")
+                self.stability_counter += 1
+                print("Big jump detected. Stability counter:", self.stability_counter)
+                if self.stability_counter < STABILITY_FRAMES:
+                    new_tip = self.prev_fingertip
+                    print("Using previous tip due to instability.")
+                else:
+                    self.stability_counter = 0
+                    print("Accepting new tip after sustained instability.")
 
-        #         if stability_counter >= STABILITY_FRAMES:
-        #             curr_fingertip = self.curr_fingertip  # Confirm new position
-        #             stability_counter = 0
-        #
-        # self.prev_fingertip = curr_fingertip
-
-
+            self.fingertip_history.append(new_tip)
+            if len(self.fingertip_history) > self.history_max_length:
+                self.fingertip_history.pop(0)
+            xs = [pt[0] for pt in self.fingertip_history]
+            ys = [pt[1] for pt in self.fingertip_history]
+            median_tip = (int(np.median(xs)), int(np.median(ys)))
+            self.curr_fingertip = median_tip
+            self.prev_fingertip = median_tip
+            print("Median filtered tip:", median_tip)
+        else:
+            print("No fingertip detected, maintaining previous tip.")
+            self.curr_fingertip = self.prev_fingertip
     # --------------------
     # helper method to remove points from strokes near an (x, y) position.
     # --------------------
 
+    # def erase_strokes_at(self, x, y, radius):
+    #     """Removes from each stroke any points lying within 'radius' of (x, y)."""
+    #     for stroke in self.drawn_strokes_gui:
+    #         # We don't erase points from "eraser strokes" themselves, but if you want to,
+    #         # remove the check below. This is optional.
+    #         if not stroke["eraser"]:
+    #             new_points = []
+    #             for (px, py) in stroke["points"]:
+    #                 dist = math.hypot(px - x, py - y)
+    #                 if dist > radius:
+    #                     new_points.append((px, py))
+    #             stroke["points"] = new_points
+
     def erase_strokes_at(self, x, y, radius):
-        """Removes from each stroke any points lying within 'radius' of (x, y)."""
-        for stroke in self.drawn_strokes:
-            # We don't erase points from "eraser strokes" themselves, but if you want to,
-            # remove the check below. This is optional.
-            if not stroke["eraser"]:
-                new_points = []
-                for (px, py) in stroke["points"]:
-                    dist = math.hypot(px - x, py - y)
-                    if dist > radius:
-                        new_points.append((px, py))
-                stroke["points"] = new_points
+        """Removes from each stroke any points lying within 'radius' of (x, y)
+        and updates the stroke's segments using segment_points."""
+        for stroke in self.drawn_strokes_gui:
+            new_points = []
+            for (px, py) in stroke["points"]:
+                dist = math.hypot(px - x, py - y)
+                if dist > radius:
+                    new_points.append((px, py))
+            stroke["points"] = new_points
+            # Update segments after erasing points
+            self.segment_points(threshold=100)
 
     # --------------------
     # points functions
