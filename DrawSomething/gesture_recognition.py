@@ -73,7 +73,7 @@ class SvmModel:
     # Initialize video capture, your model, etc.
     def get_prediction_from_classifier(self, hog_features):
         prediction_num = self.model.predict(hog_features)[0]
-        file_names = ('index_finger', 'up_thumb', 'open_hand', 'close_hand', 'three_fingers')
+        file_names = ('index_finger', 'up_thumb', 'open_hand', 'close_hand', 'three_fingers','nonsense')
         gest_prediction = file_names[prediction_num - 1]
         return gest_prediction
 

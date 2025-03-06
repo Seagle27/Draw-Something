@@ -31,7 +31,7 @@ NON_SKIN_GMM = "data/raw/non_skin_gmm.joblib"
 
 # SVM model:
 SVM_MODEL_PATH = "data/raw/gesture_svm_model.pkl"
-
+NUM_GESTURES = 6
 # gesture recognition cfg:
 WIN_SIZE = 40
 MIN_CHANGE_FRAME = 10

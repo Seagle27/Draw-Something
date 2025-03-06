@@ -109,7 +109,7 @@ class HandSegmentation:
         final_mask = cv2.medianBlur(final_mask, 5)
         final_hand_mask = self.fill_large_holes(final_mask)
         final_hand_mask = self.largest_contour_segmentation(final_hand_mask)
-        return final_hand_mask
+        return final_hand_mask, motion_mask, hybrid_mask
 
         # Probability map and motion filters:
         # # ___________________________________

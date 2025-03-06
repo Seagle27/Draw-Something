@@ -6,7 +6,7 @@ from sklearn.svm import SVC
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report
 import joblib
-
+from DrawSomething import constants
 
 def preprocess_and_crop(binary_mask):
     """
@@ -66,6 +66,49 @@ def load_gesture_data(file_path, label):
     return X, y
 
 
+def load_and_shuffle_gesture_data(person_dirs, file_names):
+    """
+    Loads gesture data from multiple person directories, shuffles it per gesture,
+    and returns a dictionary mapping each gesture to a tuple (X, y).
+
+    Args:
+      person_dirs (list): List of directory paths for each person's recordings.
+      file_names (tuple): Tuple of file names for each gesture.
+                          (e.g., ('index_finger', 'up_thumb', 'open_hand', 'close_hand', 'three_fingers', 'nonsense'))
+
+    Returns:
+      dict: A dictionary where each key is a gesture (from the first 5 file_names)
+            and the value is a tuple (X, y) with the combined and shuffled data.
+    """
+    data_by_gesture = {}
+
+    for gesture_label in range(constants.NUM_GESTURES):
+        gesture_name = file_names[gesture_label]
+        samples = []  # To store (sample, label) tuples for this gesture
+
+        for person_dir in person_dirs:
+            file_path = os.path.join(person_dir, f"{gesture_name}.npy")
+            if os.path.exists(file_path):
+                # load_gesture_data should return (X, y) as lists or arrays.
+                X, y = load_gesture_data(file_path, label=gesture_label + 1)
+                # Combine samples with their labels.
+                samples.extend(list(zip(X, y)))
+            else:
+                print(f"Warning: {file_path} not found.")
+
+        # Shuffle the samples for this gesture
+        np.random.shuffle(samples)
+        if samples:
+            X_shuffled, y_shuffled = zip(*samples)
+            X_shuffled = np.array(X_shuffled)
+            y_shuffled = np.array(y_shuffled)
+        else:
+            X_shuffled, y_shuffled = np.array([]), np.array([])
+
+        data_by_gesture[gesture_name] = (X_shuffled, y_shuffled)
+
+    return data_by_gesture
+
 def load_all_gesture_data(base_dir, file_names):
     """
     Assumes that you have 5 files named 'gesture1.npy', 'gesture2.npy', ..., 'gesture5.npy'.
@@ -74,15 +117,20 @@ def load_all_gesture_data(base_dir, file_names):
       - X_all: a NumPy array of shape (total_samples, 7)
       - y_all: a NumPy array of labels.
     """
+    person_dirs = []
     X_all = []
     y_all = []
-    base_dir = "C:/BGU/Git/DrawSomething/data/recordings"
+    person_files = ["x","y","z"]
     file_names = ('index_finger', 'up_thumb', 'open_hand', 'close_hand', 'three_fingers','nonsense')
-    num_gestures = 5  # Adjust if necessary
-    for gesture_label in range(0, num_gestures):
+    base_dir = "C:/BGU/Git/DrawSomething/data/recordings"
+    for i,iFile in enumerate(person_files):
+        person_dirs.append(os.path.join(base_dir, iFile))
+    data = load_and_shuffle_gesture_data(person_dirs, file_names)
+
+    for gesture_label in range(0, constants.NUM_GESTURES):
         file_name = f"{file_names[gesture_label]}.npy"
-        file_path = os.path.join(base_dir, file_name)
-        X, y = load_gesture_data(file_path, label=gesture_label + 1)
+        X = data[file_names[gesture_label]][0]
+        y = data[file_names[gesture_label]][1]
         X_all.extend(X)
         y_all.extend(y)
     return np.array(X_all), np.array(y_all)
@@ -143,7 +191,7 @@ if __name__ == '__main__':
     file_names = ('index_finger', 'up_thumb', 'open_hand', 'close_hand', 'three_fingers')
     X, y = load_all_gesture_data(base_dir, file_names)
     model = train(X, y)
-    joblib.dump(model, "gesture_svm_model.pkl")
+    joblib.dump(model, os.path.join(base_dir,"raw","gesture_svm_model.pkl"))
 
     # test_frames(gesture_paths, model)
     # test_video("records/test_mask.mp4", model)

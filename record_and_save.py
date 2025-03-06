@@ -37,7 +37,7 @@ for gesture in gestures:
         # Process the frame using your segmentation method
         # Assume segmentation_handler.proc_frame returns the following masks:
         # (hybrid_mask, motion_mask, fg_mask, final_mask, final_hand_mask)
-        hybrid_mask, motion_mask, fg_mask, final_mask, final_hand_mask = segmentation_handler.proc_frame(frame)
+        final_hand_mask, motion_mask, hybrid_mask = segmentation_handler.proc_frame(frame)
 
         # If a valid hand mask is found and we have passed an initial frame warm-up
         if frame_counter >= 100:
