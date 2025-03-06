@@ -1,5 +1,7 @@
 import cv2
 import numpy as np
+import time
+
 from DrawSomething import constants
 from DrawSomething.utils import utility_functions
 
@@ -26,71 +28,12 @@ def initialize_face_template(frame_bgr, face_bbox):
     return template
 
 
-def manage_face_detection_and_tracking(
-        frame,
-        frame_count,
-        skip_interval,
-        face_cascade,
-        face_tracker,
-        face_bbox,
-        update_flag
-):
-    """
-    Detect or track a face in the given frame.
-
-    Args:
-        frame (np.ndarray): BGR color image from the webcam or video.
-        frame_count (int): Current frame index (increment each loop).
-        skip_interval (int): How many frames to skip before re-running Haar detection.
-        face_cascade (cv2.CascadeClassifier): Pre-loaded Haar face detector.
-        face_tracker (cv2.legacy.Tracker or cv2.Tracker): Current face tracker, or None if not used yet.
-        face_bbox (tuple or None): Current bounding box for the face (x, y, w, h), or None.
-
-    Returns:
-        (face_tracker, face_bbox): Updated tracker and bounding box.
-    """
-    # Decide whether to run face detection on this frame
-    run_detection = (frame_count % skip_interval == 0) or (face_tracker is None) or update_flag
-    face_temp = {}
-
-    if run_detection:
-        # Convert to gray for faster/more typical Haar detection
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        faces = face_cascade.detectMultiScale(gray, scaleFactor=constants.SCALE_FACTOR, minNeighbors=5)
-
-        if len(faces) > 0:
-            # Pick the first face in the list
-            face_bbox = faces[0]  # (x, y, w, h)
-
-            face_temp = initialize_face_template(frame, face_bbox)
-
-            # Create/recreate the tracker
-            face_tracker = cv2.legacy.TrackerKCF_create()
-            face_tracker.init(frame, tuple(face_bbox))
-        else:
-            # No face found
-            face_tracker = None
-            face_bbox = None
-    else:
-        # We have an existing tracker -> update it
-        if face_tracker is not None:
-            success, bbox = face_tracker.update(frame)
-            if success:
-                # Tracker succeeded
-                face_bbox = tuple(map(int, bbox))
-            else:
-                # Tracker failed to locate the face
-                face_tracker = None
-                face_bbox = None
-
-    return face_tracker, face_bbox, face_temp
-
-
-def compute_orientation_difference_map(template, face_roi_gray):
+def compute_orientation_difference_map(template, face_roi_bgr):
     """
     Compute the edge orientation map for the current face ROI and compare it
     with the stored template orientation. Non-edge pixels (via Canny) are ignored.
     """
+    face_roi_gray = cv2.cvtColor(face_roi_bgr, cv2.COLOR_BGR2GRAY)
     current_orient, current_edges = utility_functions.compute_edge_orientation(face_roi_gray)
     template_orient = template['orientation']
     # Compute per-pixel orientation difference (only where edges exist)
@@ -246,9 +189,9 @@ def hysteresis_thresholding(img, low_thresh, high_thresh):
     return (final * 255).astype(np.uint8)
 
 
-def get_initial_face_mask(video_source, face_cascade):
-    cap = cv2.VideoCapture(video_source)
+def get_initial_face_mask(cap, face_cascade):
     print("Searching face...")
+    time.sleep(4)
     discovered_face = False
     while not discovered_face:
         # Step A: Use first frame to prime hist
@@ -268,10 +211,9 @@ def get_initial_face_mask(video_source, face_cascade):
             h, w = frame.shape[:2]
             face_mask_init = np.zeros((h, w), dtype=np.uint8)
             for (x, y, w, h) in faces:
-                face_mask_init[y:y + h, x:x + w] = 255
+                face_mask_init[y:y + int(h*1.3), x:x + w] = 255
                 discovered_face = True
 
-    cap.release()
     print("Face found")
     return face_mask_init, frame
 

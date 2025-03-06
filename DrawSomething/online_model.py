@@ -4,12 +4,12 @@ from DrawSomething import constants
 
 
 class OnlineModel:
-    def __init__(self, threshold, skin_mask, frame):
+    def __init__(self, threshold, skin_mask, non_skin_mask, frame):
         self.skin_hist, self.non_skin_hist = self.create_new_histograms()
         self.threshold = threshold
 
         frame_hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-        self.init_histograms(frame_hsv, skin_mask)
+        self.init_histograms(frame_hsv, skin_mask, non_skin_mask)
 
     @staticmethod
     def create_new_histograms():
@@ -18,9 +18,9 @@ class OnlineModel:
         non_skin_h = np.zeros((constants.H_BINS, constants.S_BINS, constants.V_BINS), dtype=np.float32)
         return skin_h, non_skin_h
 
-    def init_histograms(self, frame_hsv, skin_mask):
+    def init_histograms(self, frame_hsv, skin_mask, non_skin_mask):
         self.skin_hist = self.hist_update_vectorized(self.skin_hist, frame_hsv, skin_mask)
-        self.non_skin_hist = self.hist_update_vectorized(self.non_skin_hist, frame_hsv, 255 - skin_mask)
+        self.non_skin_hist = self.hist_update_vectorized(self.non_skin_hist, frame_hsv, non_skin_mask)
 
     @staticmethod
     def bin_indices_hsv(frame_hsv):

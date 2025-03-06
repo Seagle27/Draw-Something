@@ -8,10 +8,18 @@ class ColorSpace(Enum):
     HSV = 4
 
 
+VIDEO_SOURCE = 0
+
+# Thresholds
+ONLINE_THRESHOLD = 0.5
+OFFLINE_THRESHOLD = 0.4
+
+
 # Online model:
 H_BINS = 8
 S_BINS = 4
 V_BINS = 2
+
 
 # Face Detection:
 CASCADE_FACE_DETECTOR = 'haarcascade_frontalface_default.xml'
