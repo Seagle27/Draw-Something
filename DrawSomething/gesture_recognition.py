@@ -35,7 +35,7 @@ class GestureStabilizer:
             return majority_label
         elif majority_count >= self.window_size // 6 and self.stable_label==majority_label:
             return majority_label
-        self.stable_label=None
+        self.stable_label = None
         return None
 
         # # If no stable label yet, initialize it.
