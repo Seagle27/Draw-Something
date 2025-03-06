@@ -76,8 +76,8 @@ def load_all_gesture_data(base_dir, file_names):
     """
     X_all = []
     y_all = []
-    base_dir = "C:/BGU/Git/DrawSomething/data"
-    file_names = ('index_finger', 'up_thumb', 'open_hand', 'close_hand', 'three_fingers')
+    base_dir = "C:/BGU/Git/DrawSomething/data/recordings"
+    file_names = ('index_finger', 'up_thumb', 'open_hand', 'close_hand', 'three_fingers','nonsense')
     num_gestures = 5  # Adjust if necessary
     for gesture_label in range(0, num_gestures):
         file_name = f"{file_names[gesture_label]}.npy"
