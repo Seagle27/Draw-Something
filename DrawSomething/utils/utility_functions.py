@@ -41,7 +41,6 @@ def compute_edge_orientation(gray_img, low_threshold=50, high_threshold=100):
 
     # Mask orientation so that only edge pixels have non-zero values
     orientation_masked = np.where(edges > 0, orientation, 0)
-    # cv2.imshow("orientation", orientation_masked)
 
     return orientation_masked, edges
 

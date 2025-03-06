@@ -22,7 +22,6 @@ class HandSegmentation:
         fg = self.background_subtraction(frame)
 
         non_skin = cv2.bitwise_not(cv2.bitwise_and(fg, offline_mask))
-        # cv2.imshow('not skin init', non_skin)
         self.online_model = OnlineModel(ONLINE_THRESHOLD, self.face_mask, non_skin, frame)
         self.face_tracker = None
         self.gray_face_buffer = []
@@ -64,7 +63,6 @@ class HandSegmentation:
         hybrid_mask = cv2.bitwise_and(fg_mask, hybrid_mask)
         # contours_count, _ = self.count_large_contours(hybrid_mask, min_area=500)
         # print("contours count: ", contours_count)%
-        # fg_frame = bgfg.apply(frame, learningRate=1e-4)
         # new_hybrid_mask = cv2.bitwise_and(hybrid_mask, fg_frame)
         # new_hybrid_mask = cv2.medianBlur(new_hybrid_mask, 3)
 
@@ -87,7 +85,7 @@ class HandSegmentation:
         non_skin_mask[face_mask_extended == 255] = 0
         self.online_model.update(frame_hsv, skin_mask, non_skin_mask)
         # combined_mask = self.hand_over_face(frame, skin_mask)
-        fg_mask2 = self.bg_subtractor.apply(frame, learningRate=5e-3)
+        fg_mask2 = self.bg_subtractor.apply(frame, learningRate=7e-2)
         motion_mask_high = bg_and_motion.get_high_motion_mask(fg_mask2, high_thresh=70)
         motion_mask = cv2.morphologyEx(motion_mask_high, cv2.MORPH_CLOSE, kernel)
 
@@ -109,13 +107,13 @@ class HandSegmentation:
 
         final_mask = cv2.bitwise_or(face_area_mask, not_face_area_mask)
         final_mask = cv2.medianBlur(final_mask, 5)
-        final_hand_mask = self.largest_contour_segmentation(final_mask)
-        # return hybrid_mask, motion_mask, fg_mask, final_mask, final_hand_mask
+        final_hand_mask = self.fill_large_holes(final_mask)
+        final_hand_mask = self.largest_contour_segmentation(final_hand_mask)
         return final_hand_mask
 
         # Probability map and motion filters:
         # # ___________________________________
-        # fg_mask = bg_subtractor.apply(frame)  # , learningRate=5e-3)
+
         # #
         # # # Optionally smooth the fg_mask:
         # # # fg_mask = cv2.medianBlur(fg_mask, 5)
@@ -181,12 +179,12 @@ class HandSegmentation:
         """
         # Decide whether to run face detection on this frame
         run_detection = self.face_tracker is None or run_detection
+        face_bbox = None
 
         if run_detection:
             # Convert to gray for faster/more typical Haar detection
             gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
             faces = self._face_cascade.detectMultiScale(gray, scaleFactor=SCALE_FACTOR, minNeighbors=5)
-
             if len(faces) > 0:
                 # Pick the first face in the list
                 face_bbox = faces[0]  # (x, y, w, h)
@@ -197,7 +195,6 @@ class HandSegmentation:
             else:
                 # No face found
                 self.face_tracker = None
-                face_bbox = None
         else:
             # We have an existing tracker -> update it
             if self.face_tracker is not None:
@@ -208,7 +205,6 @@ class HandSegmentation:
                 else:
                     # Tracker failed to locate the face
                     self.face_tracker = None
-                    face_bbox = None
 
         return face_bbox
 
@@ -330,6 +326,33 @@ class HandSegmentation:
         valid_contours = [cnt for cnt in contours if cv2.contourArea(cnt) >= min_area]
 
         return len(valid_contours), valid_contours
+    @staticmethod
+    def fill_large_holes(mask):
+        """
+        Fills large holes inside a binary mask using flood fill.
+
+        Parameters:
+        - mask: Binary mask (0 and 255) of shape (H, W).
+
+        Returns:
+        - filled_mask: Mask with large holes filled.
+        """
+        # Copy the mask and convert to 3 channels (needed for flood fill)
+        h, w = mask.shape
+        filled_mask = mask.copy()
+        mask_floodfill = mask.copy()
+
+        # Create a mask for flood fill (2 pixels larger)
+        flood_mask = np.zeros((h + 2, w + 2), np.uint8)
+
+        # Flood fill from point (0,0) - assumes black background
+        cv2.floodFill(mask_floodfill, flood_mask, (0, 0), 255)
+
+        # Invert flood-filled mask and combine with the original
+        inverted_flood_fill = cv2.bitwise_not(mask_floodfill)
+        filled_mask = mask | inverted_flood_fill
+
+        return filled_mask
 
 
 def segment_hand_with_face_overlap(
