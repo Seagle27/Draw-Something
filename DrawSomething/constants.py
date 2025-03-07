@@ -35,3 +35,57 @@ NUM_GESTURES = 6
 # gesture recognition cfg:
 WIN_SIZE = 40
 MIN_CHANGE_FRAME = 10
+
+
+# Threshold for detecting a "jump" (in pixels)
+JUMP_THRESHOLD = 50
+# Number of frames needed to accept a new position
+STABILITY_FRAMES = 12
+# Minimum smoothing factor (very smooth, slow response)
+EMA_ALPHA_MIN = 0.25
+# Maximum smoothing factor (fast response)
+EMA_ALPHA_MAX = 0.9
+# Movement speed below this uses max smoothing
+SPEED_THRESHOLD_LOW = 10
+# Movement speed above this uses min smoothing
+SPEED_THRESHOLD_HIGH = 30
+
+# GUI Parameters
+FRAME_WIDTH =  640
+FRAME_HEIGHT = 480
+
+# Color Bar Constants
+START_X_POS = 30
+Y_POS = 30
+BUTTON_RADIUS = 20
+BUTTON_ROAIUS_OF_SELECTED = 30
+BUTTON_SPACING = 70
+
+BRUSH_BLACK_ICON = "GUI_photos/brush_black.png"
+ERASER_BLACK_ICON = "GUI_photos/eraser_black.png"
+ERASER_WHITE_ICON = "GUI_photos/eraser_white.png"
+
+COLORS_OPTIONS = {
+            "black": (0, 0, 0),
+            "red": (0, 0, 255),
+            "salmon": (122, 158, 227),
+            "green": (0, 255, 0),
+            "yellow": (0, 255, 255),
+            "blue": (255, 0, 0)
+        }
+
+# Width Bar Constanst
+WIDTH_OPTIONS = [2,4,8,12]
+START_Y_POS = 110
+X_POS = 30 #610
+#X_CLEAR = 30
+ERASER_RADIUS = 10
+HISTORY_MAX_LENGTH = 10 # was 1
+
+# Detection Shapes
+NUM_BINS = 36
+THRESHOLD_abstract = 7
+THRESHOLD = 7
+GAUSS_BLUR_K = 7
+GAUSS_BLUR_SIGMA = 10
+SOBEL_K = 3
