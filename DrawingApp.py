@@ -15,7 +15,7 @@ from DrawSomething import constants
 # Utility / Standalone Functions
 from DrawSomething.overlay_utils import apply_brush_mask
 from DrawSomething.print_on_frame import print_gesture_on_frame,print_color_on_frame
-from DrawSomething.fingertip_detection import find_fingertip,smooth_fingertip,is_valid_fingertip,detect_fingertip,dynamic_ema_alpha
+from DrawSomething.fingertip_detection import find_fingertip,smooth_fingertip,is_valid_fingertip,detect_fingertip,preprocess_mask
 from DrawSomething.geometry_utils import rotate_point, chaikin_smoothing
 from DrawSomething.shape_detection import best_fit_shape
 
@@ -75,7 +75,6 @@ class DrawingApp:
         self.prev_width = None
         self.prev_eraser_mode = None
         self.last_eraser = None
-        self.smooth_flag = False # mabey better self.prev_num_strokes
         self.fingertip_history = []
         self.prev_fingertip = None
 
@@ -120,36 +119,40 @@ class DrawingApp:
             })
             x += constants.BUTTON_SPACING
 
-        # Eraser Button
-        self.eraser_button = {
-            "center": (x, constants.Y_POS),
-            "radius": constants.BUTTON_RADIUS
-        }
-        x += constants.BUTTON_SPACING
-
-        # Stroke-Eraser Button
-        self.eraser_stroke_button = {
-            "center": (x, constants.Y_POS),
-            "radius": constants.BUTTON_RADIUS
-        }
-        x += constants.BUTTON_SPACING
-
         # Clear Button
+        x = constants.X_CLEAR
+        y = constants.Y_CLEAR
         self.clear_button = {
-            "center": (x, constants.START_Y_POS),
+            "center": (x, y),
             "radius": constants.BUTTON_RADIUS
         }
 
         # Width Circles
         y = constants.START_Y_POS
-        x = constants.X_POS
+        #x = constants.X_POS
+        x = constants.START_X_POS
         for line_width in constants.WIDTH_OPTIONS:
             self.width_circles.append({
                 "width": line_width,
                 "center": (x, y),
                 "radius": constants.BUTTON_RADIUS
             })
-            y += constants.BUTTON_SPACING
+            #y += constants.BUTTON_SPACING
+            x += constants.BUTTON_SPACING
+
+        # Eraser Button
+        self.eraser_button = {
+            "center": (x, y),
+            "radius": constants.BUTTON_RADIUS
+        }
+        x += constants.BUTTON_SPACING
+
+        # Stroke-Eraser Button
+        self.eraser_stroke_button = {
+            "center": (x, y),
+            "radius": constants.BUTTON_RADIUS
+        }
+        x += constants.BUTTON_SPACING
 
     def create_buttons_overlay(self):
         """
@@ -159,6 +162,11 @@ class DrawingApp:
         """
         overlay = np.zeros((constants.FRAME_HEIGHT, constants.FRAME_WIDTH, 3), dtype=np.uint8)
         mask = np.zeros((constants.FRAME_HEIGHT, constants.FRAME_WIDTH), dtype=np.uint8)
+        gray = (128, 128, 128)
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        thickness = 1
+        text_color = (255, 255, 255)
+        font_scale = 0.5
 
         # --- Draw Color Buttons (with eraser and clear) ---
         x = constants.START_X_POS
@@ -188,50 +196,20 @@ class DrawingApp:
             region[mask_brush == 0] = 255
             x += constants.BUTTON_SPACING
 
-        # Eraser Button
-        gray = (128, 128, 128)
-        radius = constants.BUTTON_RADIUS
-        if self.eraser_mode and self.eraser_type =="Normal":
-            radius = constants.BUTTON_ROAIUS_OF_SELECTED
-        cv2.circle(overlay, (x, constants.Y_POS), radius, gray, -1)
-        cv2.circle(mask, (x, constants.Y_POS), radius, 255, -1)
-        overlay, _ = apply_brush_mask(constants.ERASER_BLACK_ICON, overlay, x, constants.Y_POS, type="black", invert=True,
-                                      threshold=128)
-        overlay, _ = apply_brush_mask(constants.ERASER_WHITE_ICON, overlay, x, constants.Y_POS, type="white", invert=False,
-                                      threshold=128)
-
-        x += constants.BUTTON_SPACING
-
-        # Stroke-Eraser Button
-        y = constants.Y_POS
-        radius = constants.BUTTON_RADIUS
-        if self.eraser_mode and self.eraser_type == "Stroke":
-            radius = constants.BUTTON_ROAIUS_OF_SELECTED
-        cv2.circle(overlay, (x, y), radius, gray, -1)
-        cv2.circle(mask, (x, y), radius, 255, -1)
-        font = cv2.FONT_HERSHEY_SIMPLEX
-        font_scale = 0.3
-        thickness = 1
-        text_color = (255, 255, 255)
-        text3 = "E-stroke"
-        text_size3, _ = cv2.getTextSize(text3, font, font_scale, thickness)
-        text_x3 = x - text_size3[0] // 2
-        cv2.putText(overlay, text3, (text_x3, y + 5), font, font_scale, text_color, thickness, cv2.LINE_AA)
-
-        x += constants.BUTTON_SPACING
-
         # Clear Button
-        cv2.circle(overlay, (x, constants.Y_POS), constants.BUTTON_RADIUS, gray, -1)
-        cv2.circle(mask, (x, constants.Y_POS), constants.BUTTON_RADIUS, 255, -1)
-        font_scale = 0.5
-        text3 = "clear"
-        text_size3, _ = cv2.getTextSize(text3, font, font_scale, thickness)
-        text_x3 = x - text_size3[0] // 2
-        cv2.putText(overlay, text3, (text_x3, constants.Y_POS + 5), font, font_scale, text_color, thickness, cv2.LINE_AA)
+        x = constants.X_CLEAR
+        y = constants.Y_CLEAR
+        cv2.circle(overlay, (x, y), constants.BUTTON_RADIUS, gray, -1)
+        cv2.circle(mask, (x, y), constants.BUTTON_RADIUS, 255, -1)
+
+        text = "clear"
+        text_size, _ = cv2.getTextSize(text, font, font_scale, thickness)
+        text_x = x - text_size[0] // 2
+        cv2.putText(overlay, text, (text_x, y + 5), font, font_scale, text_color, thickness, cv2.LINE_AA)
 
         # --- Draw Width Buttons ---
         y = constants.START_Y_POS
-        x = constants.X_POS
+        x = constants.START_X_POS
         for line_width in constants.WIDTH_OPTIONS:
             radius = constants.BUTTON_RADIUS
             if self.current_width == line_width:
@@ -244,7 +222,31 @@ class DrawingApp:
             end_point = (x + constants.BUTTON_RADIUS - margin, y)
             line_color = (0, 0, 0)
             cv2.line(overlay, start_point, end_point, line_color, line_width)
-            y += constants.BUTTON_SPACING
+            x += constants.BUTTON_SPACING
+
+        radius = constants.BUTTON_RADIUS
+        if self.eraser_mode and self.eraser_type == "Normal":
+            radius = constants.BUTTON_ROAIUS_OF_SELECTED
+        cv2.circle(overlay, (x, y), radius, gray, -1)
+        cv2.circle(mask, (x, y), radius, 255, -1)
+        overlay = apply_brush_mask(constants.ERASER_BLACK_ICON, overlay, x, y, type="black", invert=True,
+                                   threshold=128)[0]
+        overlay = apply_brush_mask(constants.ERASER_WHITE_ICON, overlay, x, y, type="white", invert=False,
+                                   threshold=128)[0]
+        x += constants.BUTTON_SPACING
+
+        # Stroke-Eraser Button
+        radius = constants.BUTTON_RADIUS
+        if self.eraser_mode and self.eraser_type == "Stroke":
+            radius = constants.BUTTON_ROAIUS_OF_SELECTED
+        cv2.circle(overlay, (x, y), radius, gray, -1)
+        cv2.circle(mask, (x, y), radius, 255, -1)
+        overlay = \
+        apply_brush_mask(constants.ERASER_S_WHITE_ICON, overlay, x, y, type="white", invert=False,
+                         threshold=128)[0]
+        overlay = \
+        apply_brush_mask(constants.ERASER_S_BLACK_ICON, overlay, x, y, type="black", invert=True,
+                         threshold=128)[0]
 
         self.mask = mask
         self.static_overlay = overlay
@@ -289,6 +291,8 @@ class DrawingApp:
 
     def check_width_button_click(self, x, y):
         for circle in self.width_circles:
+            # if x > constants.BUTTON_RADIUS and x < threshold:
+            #     x = x - threshold
             cx, cy = circle["center"]
             r = circle["radius"]
             dist = math.hypot(x - cx, y - cy)
@@ -312,9 +316,11 @@ class DrawingApp:
         self.current_width = width
 
     def clear_all_drawings(self):
-        self.canvas.delete("all")
-        self.drawn_strokes.clear()
-        self.eraser_partial_mask = np.zeros((constants.FRAME_HEIGHT, constants.FRAME_WIDTH), dtype=np.uint8)
+        if len(self.drawn_strokes)!=0:
+            print("Cleaning the canvas...")
+            self.canvas.delete("all")
+            self.drawn_strokes.clear()
+            self.eraser_partial_mask = np.zeros((constants.FRAME_HEIGHT, constants.FRAME_WIDTH), dtype=np.uint8)
 
     def activate_eraser(self,type):
         self.prev_eraser_mode = self.eraser_mode
@@ -375,7 +381,9 @@ class DrawingApp:
                 pts = np.array(self.current_points, dtype=np.int32).reshape((-1, 1, 2))
                 color_bgr = constants.COLORS_OPTIONS[list(self.current_color.keys())[0]]
                 cv2.polylines(frame, [pts], isClosed=False, color=color_bgr, thickness=self.current_width)
-        cv2.circle(frame, (int(x), int(y)), 8, constants.COLORS_OPTIONS[list(self.current_color.keys())[0]], -1)
+            cv2.circle(frame, (int(x), int(y)), 8, constants.COLORS_OPTIONS[list(self.current_color.keys())[0]], -1)
+        else:
+            cv2.circle(frame, (int(x), int(y)), 8, (128,128,128), -1)
         return frame
 
     def on_hand_3fingers(self, x, y):
@@ -397,8 +405,6 @@ class DrawingApp:
             self.create_buttons_overlay()
         elif (s_eraser_pressed or eraser_pressed) and (self.last_eraser!=self.eraser_type):
             self.create_buttons_overlay()
-        # elif self.eraser_mode and self.eraser_type != self.last_eraser:
-        #     self.create_buttons_overlay()
         if self.current_width != self.prev_width and self.prev_width is not None:
             self.create_buttons_overlay()
 
@@ -414,46 +420,10 @@ class DrawingApp:
                     break
 
             # Re-draw
-            for stroke in self.drawn_strokes:
-                points = stroke["points"]
-                color = stroke["color"]
-                width = stroke["width"]
-                eraser_mode = stroke["eraser"]
-                smoothed = chaikin_smoothing(points, iterations=2)
-
-                if eraser_mode:
-                    self.draw_freehand(points, "white", width=20)
-                else:
-                    if stroke.get("abstracted", False):
-                        self.draw_freehand(smoothed, color, width)
-                    else:
-                        shape = stroke.get("shape", None)
-                        angle = stroke.get("angle", 0)
-                        aligned_edge = stroke.get("aligned_edge", "None")
-
-                        if shape is None:
-                            shape, angle, aligned_edge = best_fit_shape(smoothed)
-                            stroke["shape"] = shape
-                            stroke["angle"] = angle
-                            stroke["aligned_edge"] = aligned_edge
-
-                        if shape == "line":
-                            self.draw_line(smoothed, color, width)
-                        elif shape == "circle":
-                            self.draw_circle(smoothed, color, width)
-                        elif shape == "ellipse":
-                            self.draw_ellipse(smoothed, color, angle, width)
-                        elif shape == "rectangle":
-                            self.draw_rectangle(smoothed, color, angle, width)
-                        elif shape == "triangle":
-                            self.draw_triangle(smoothed, aligned_edge, color, angle, width)
-                        else:
-                            self.draw_freehand(smoothed, color, width)
+            self.draw_strokes_on_canvas()
 
     def on_hand_thumbsup(self):
-        #if not self.smooth_flag:
         if self.prev_gesture != self.current_gesture:
-            self.smooth_flag = True
             print("Smoothing the shapes...")
             self.canvas.delete("all")
 
@@ -492,31 +462,55 @@ class DrawingApp:
     # SECTION: Fingertip Methods
     # ===========================
 
-    def stable_detect_fingertip(self, mask):
-        x, y = find_fingertip(mask)
-        new_tip = (x, y)
+    def stable_detect_fingertip(self, mask,history_size = constants.HISTORY_MAX_LENGTH):
+        # Preprocess the mask to remove noise
+        cleaned_mask = preprocess_mask(mask)
+
+        # Detect new fingertip
+        new_tip = detect_fingertip(cleaned_mask)
+
+        # If new_tip is valid or we have no previous tip
         if new_tip is not None:
-            if self.prev_fingertip is None or is_valid_fingertip(new_tip, self.prev_fingertip):
-                new_tip = smooth_fingertip(new_tip, self.prev_fingertip) if self.prev_fingertip else new_tip
+            # Check if we should accept this new tip based on jump threshold
+            if is_valid_fingertip(new_tip, self.prev_fingertip):
+                # Smooth it with EMA
+                new_tip = (
+                    smooth_fingertip(new_tip, self.prev_fingertip)
+                    if self.prev_fingertip is not None
+                    else new_tip
+                )
                 self.stability_counter = 0
             else:
+                # The new tip is too far from the previous, might be a jump
                 self.stability_counter += 1
                 if self.stability_counter < constants.STABILITY_FRAMES:
+                    # Use the old tip for now
                     new_tip = self.prev_fingertip
                 else:
+                    # If we've been unstable for too long, reset the counter
                     self.stability_counter = 0
 
-            self.fingertip_history.append(new_tip)
-            if len(self.fingertip_history) > constants.HISTORY_MAX_LENGTH:
-                self.fingertip_history.pop(0)
-            xs = [pt[0] for pt in self.fingertip_history]
-            ys = [pt[1] for pt in self.fingertip_history]
-            median_tip = (int(np.median(xs)), int(np.median(ys)))
-            self.curr_fingertip = median_tip
-            self.prev_fingertip = median_tip
+            # Add the new tip (or the fallback) into the history
+            if new_tip is not None:
+                self.fingertip_history.append(new_tip)
+
+                # If history too big, pop oldest
+                if len(self.fingertip_history) > history_size:
+                    self.fingertip_history.pop(0)
+
+                # Take the median of recent points to further reduce jitter
+                xs = [pt[0] for pt in self.fingertip_history]
+                ys = [pt[1] for pt in self.fingertip_history]
+                median_tip = (int(np.median(xs)), int(np.median(ys)))
+
+                # Update current and previous fingertip
+                self.curr_fingertip = median_tip
+                self.prev_fingertip = median_tip
         else:
+            # If we didn't detect a fingertip, keep the old position
             self.curr_fingertip = self.prev_fingertip
 
+        return self.curr_fingertip
     # ========================
     # Eraser Methods
     # ========================
@@ -528,6 +522,7 @@ class DrawingApp:
                 dist = math.hypot(px - x, py - y)
                 if dist < threshold:
                     self.drawn_strokes.pop(i)
+                    self.draw_strokes_on_canvas()
                     break
 
     def erase_partial_at_point(self, x, y, radius=10):
@@ -538,6 +533,43 @@ class DrawingApp:
     # ============================
     # Drawing Functions
     # ============================
+
+    def draw_strokes_on_canvas(self):
+        for stroke in self.drawn_strokes:
+            points = stroke["points"]
+            color = stroke["color"]
+            width = stroke["width"]
+            eraser_mode = stroke["eraser"]
+            smoothed = chaikin_smoothing(points, iterations=2)
+
+            if eraser_mode:
+                self.draw_freehand(points, "white", width=20)
+            else:
+                if stroke.get("abstracted", False):
+                    self.draw_freehand(smoothed, color, width)
+                else:
+                    shape = stroke.get("shape", None)
+                    angle = stroke.get("angle", 0)
+                    aligned_edge = stroke.get("aligned_edge", "None")
+
+                    if shape is None:
+                        shape, angle, aligned_edge = best_fit_shape(smoothed)
+                        stroke["shape"] = shape
+                        stroke["angle"] = angle
+                        stroke["aligned_edge"] = aligned_edge
+
+                    if shape == "line":
+                        self.draw_line(smoothed, color, width)
+                    elif shape == "circle":
+                        self.draw_circle(smoothed, color, width)
+                    elif shape == "ellipse":
+                        self.draw_ellipse(smoothed, color, angle, width)
+                    elif shape == "rectangle":
+                        self.draw_rectangle(smoothed, color, angle, width)
+                    elif shape == "triangle":
+                        self.draw_triangle(smoothed, aligned_edge, color, angle, width)
+                    else:
+                        self.draw_freehand(smoothed, color, width)
 
     def draw_freehand(self, points, color, width):
         for i in range(len(points) - 1):
@@ -708,26 +740,24 @@ class DrawingApp:
         frame_gui = frame.copy()
         frame_gui[self.mask != 0] = self.static_overlay[self.mask != 0] # draw Buttons
 
+        if gesture_name == "up_thumb":
+            gesture_name = "index_finger"
         print_gesture_on_frame(frame_gui, gesture_name)
         print_color_on_frame(frame_gui,list(self.current_color.keys())[0])
 
         # Handle Gestures
         if self.current_gesture == "close_hand":
-            #self.smooth_flag = False
             self.on_hand_close()
             self.on_hand_thumbsup() # Now close hand is thumb up, we can use 3fingers as close hand for now
         # THUMB UP AND INDEX FINGER ARE THE SAME
         #elif self.current_gesture == "up_thumb":
-        #    self.smooth_flag = False
             #self.on_hand_close()
             #self.on_hand_thumbsup()
         elif self.current_gesture == "open_hand":
-            self.smooth_flag = False
             self.on_hand_close()
             self.on_hand_open()
         # THUMB UP AND INDEX FINGER ARE THE SAME
         elif self.current_gesture == "index_finger" or self.current_gesture == "up_thumb":
-            self.smooth_flag = False
             self.stable_detect_fingertip(mask_frame)
             if self.curr_fingertip:
                 x, y = self.curr_fingertip[0], self.curr_fingertip[1]
@@ -745,8 +775,11 @@ class DrawingApp:
                     else:
                         frame_gui = self.on_index_finger(x, y, frame_gui)
         elif self.current_gesture == "three_fingers":
-            self.smooth_flag = False
-            pos_x, pos_y = find_fingertip(mask_frame)
+            #pos_x, pos_y = find_fingertip(mask_frame)
+            self.stable_detect_fingertip(mask_frame,constants.HISTORY_MAX_LENGTH_3FINGERS)
+            if self.curr_fingertip:
+                pos_x,pos_y = self.curr_fingertip[0], self.curr_fingertip[1]
+            cv2.circle(frame_gui, (int(pos_x), int(pos_y)), 10, (255, 255, 255), -1)
             self.on_hand_close()
             self.on_hand_3fingers(pos_x, pos_y)
         #else:

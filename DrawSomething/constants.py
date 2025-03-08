@@ -55,15 +55,17 @@ FRAME_WIDTH =  640
 FRAME_HEIGHT = 480
 
 # Color Bar Constants
-START_X_POS = 30
+START_X_POS = 110 # 30
 Y_POS = 30
 BUTTON_RADIUS = 20
 BUTTON_ROAIUS_OF_SELECTED = 30
-BUTTON_SPACING = 70
+BUTTON_SPACING = 70 # 70
 
 BRUSH_BLACK_ICON = "GUI_photos/brush_black.png"
 ERASER_BLACK_ICON = "GUI_photos/eraser_black.png"
 ERASER_WHITE_ICON = "GUI_photos/eraser_white.png"
+ERASER_S_BLACK_ICON = "GUI_photos/eraserS_black.png"
+ERASER_S_WHITE_ICON = "GUI_photos/eraser_white.png"
 
 COLORS_OPTIONS = {
             "black": (0, 0, 0),
@@ -76,11 +78,19 @@ COLORS_OPTIONS = {
 
 # Width Bar Constanst
 WIDTH_OPTIONS = [2,4,8,12]
-START_Y_POS = 110
-X_POS = 30 #610
+#START_Y_POS = 110
+START_Y_POS = 100
+X_POS = 110 # 30 #610
 #X_CLEAR = 30
+#X_CLEAR = START_X_POS + BUTTON_SPACING*(len(WIDTH_OPTIONS)) # with the width
+X_CLEAR = START_X_POS + BUTTON_SPACING*(len(COLORS_OPTIONS)) # with color
+#Y_CLEAR = START_Y_POS # with the width
+Y_CLEAR = Y_POS # with color
+
+#Y_CLEAR = START_Y_POS + BUTTON_SPACING*(len(WIDTH_OPTIONS))
 ERASER_RADIUS = 10
-HISTORY_MAX_LENGTH = 10 # was 1
+HISTORY_MAX_LENGTH = 5 # 10 # was 1
+HISTORY_MAX_LENGTH_3FINGERS = 5
 
 # Detection Shapes
 NUM_BINS = 36
@@ -89,3 +99,4 @@ THRESHOLD = 7
 GAUSS_BLUR_K = 7
 GAUSS_BLUR_SIGMA = 10
 SOBEL_K = 3
+

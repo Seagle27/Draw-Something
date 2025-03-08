@@ -1,3 +1,7 @@
+"""
+geometry utils - helper function (using for detecting shape)
+
+"""
 # geometry_utils.py
 
 import math

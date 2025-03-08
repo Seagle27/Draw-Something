@@ -1,3 +1,7 @@
+"""
+print on frame - helper functions
+
+"""
 import cv2
 
 def print_gesture_on_frame(frame, gesture="no gesture"):
