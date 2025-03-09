@@ -1,7 +1,7 @@
 import collections
 import classifier as svm
 import joblib
-
+from DrawSomething import constants
 
 class GestureStabilizer:
     def __init__(self, window_size=60, min_change_frames=60):
@@ -29,11 +29,13 @@ class GestureStabilizer:
         # Compute the majority (mode) from the sliding window
         counter = collections.Counter(self.predictions)
         majority_label, majority_count = counter.most_common(1)[0]
-
-        if majority_count >= self.window_size // 4:
+        if len(self.predictions) == self.window_size:
+            if self.predictions[-1] == self.predictions[-2] == self.predictions[-3] == self.predictions[-4]:
+                return self.predictions[-1]
+        if majority_count >= self.window_size // 2:
             self.stable_label = majority_label
             return majority_label
-        elif majority_count >= self.window_size // 6 and self.stable_label==majority_label:
+        elif majority_count >= self.window_size // 4 and self.stable_label==majority_label:
             return majority_label
         self.stable_label = None
         return None
@@ -73,7 +75,7 @@ class SvmModel:
     # Initialize video capture, your model, etc.
     def get_prediction_from_classifier(self, hog_features):
         prediction_num = self.model.predict(hog_features)[0]
-        file_names = ('index_finger', 'open_hand', 'close_hand', 'three_fingers','nonsense')
+        file_names = constants.file_names
         gest_prediction = file_names[prediction_num - 1]
         return gest_prediction
 

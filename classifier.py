@@ -8,6 +8,7 @@ from sklearn.metrics import classification_report
 import joblib
 from DrawSomething import constants
 
+
 def preprocess_and_crop(binary_mask):
     """
     1. Find bounding box around the largest contour (the hand).
@@ -109,6 +110,7 @@ def load_and_shuffle_gesture_data(person_dirs, file_names):
 
     return data_by_gesture
 
+
 def load_all_gesture_data(base_dir, file_names):
     """
     Assumes that you have 5 files named 'gesture1.npy', 'gesture2.npy', ..., 'gesture5.npy'.
@@ -120,9 +122,7 @@ def load_all_gesture_data(base_dir, file_names):
     person_dirs = []
     X_all = []
     y_all = []
-    person_files = ["x","y","z","a","b","c"]
-    file_names = ('index_finger', 'open_hand', 'close_hand', 'three_fingers','nonsense')
-    base_dir = "C:/BGU/Git/DrawSomething/data/recordings"
+    person_files = ["a","b"]
     for i,iFile in enumerate(person_files):
         person_dirs.append(os.path.join(base_dir, iFile))
     data = load_and_shuffle_gesture_data(person_dirs, file_names)
@@ -187,11 +187,12 @@ def test_video(video_path, model):
 
 
 if __name__ == '__main__':
-    base_dir = "C:/BGU/Git/DrawSomething/data"
-    file_names = ('index_finger', 'open_hand', 'close_hand', 'three_fingers','nonsense')
-    X, y = load_all_gesture_data(base_dir, file_names)
+    base_dir_recs = "C:/BGU/Git/DrawSomething/data/recordings"
+    base_dir_model = "C:/BGU/Git/DrawSomething/data/raw"
+    file_names = constants.file_names
+    X, y = load_all_gesture_data(base_dir_recs, file_names)
     model = train(X, y)
-    joblib.dump(model, os.path.join(base_dir,"raw","gesture_svm_model.pkl"))
+    joblib.dump(model, os.path.join(base_dir_model, "gesture_svm_model.pkl"))
 
     # test_frames(gesture_paths, model)
     # test_video("records/test_mask.mp4", model)

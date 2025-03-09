@@ -1,10 +1,11 @@
 import cv2
 import numpy as np
 import time
-from DrawSomething import segmentation
+from DrawSomething import segmentation,constants
+
 
 # List of gestures and number of frames per gesture
-gestures = ['index_finger', 'open_hand', 'close_hand', 'three_fingers', 'nonsense']
+gestures = constants.file_names
 num_frames_per_gesture = 700
 # Open the webcam
 cap = cv2.VideoCapture(0)
