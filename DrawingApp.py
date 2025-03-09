@@ -76,6 +76,7 @@ class DrawingApp:
         self.prev_eraser_mode = None
         self.last_eraser = None
         self.fingertip_history = []
+        self.three_fingertip_history = []
         self.prev_fingertip = None
 
         # ------------
@@ -259,46 +260,90 @@ class DrawingApp:
         for circle in self.color_circles:
             cx, cy = circle["center"]
             r = circle["radius"]
-            dist = math.hypot(x - cx, y - cy)
-            if dist <= r:
+            button_counter = 0
+            for point in self.three_fingertip_history:
+                x = point[0]
+                y = point[1]
+                if math.hypot(x - cx, y - cy) <= r:
+                    button_counter += 1
+            if button_counter > constants.HISTORY_MAX_LENGTH_3FINGERS // 2:
                 self.set_color(circle["color"])
                 return True
+            # dist = math.hypot(x - cx, y - cy)
+            # if dist <= r:
+            #     self.set_color(circle["color"])
+            #     return True
         return False
 
     def check_eraser_button_click(self, x, y):
         cx, cy = self.eraser_button["center"]
         r = self.eraser_button["radius"]
-        if math.hypot(x - cx, y - cy) <= r:
+        button_counter = 0
+        for point in self.three_fingertip_history:
+            x = point[0]
+            y = point[1]
+            if math.hypot(x - cx, y - cy) <= r:
+                button_counter += 1
+        if button_counter > constants.HISTORY_MAX_LENGTH_3FINGERS // 2:
             self.activate_eraser("Normal")
             return True
+        # if math.hypot(x - cx, y - cy) <= r:
+        #     self.activate_eraser("Normal")
+        #     return True
         return False
 
     def check_S_eraser_button_click(self, x, y):
         cx, cy = self.eraser_stroke_button["center"]
         r = self.eraser_stroke_button["radius"]
-        if math.hypot(x - cx, y - cy) <= r:
+        button_counter = 0
+        for point in self.three_fingertip_history:
+            x = point[0]
+            y = point[1]
+            if math.hypot(x - cx, y - cy) <= r:
+                button_counter+=1
+        if button_counter>constants.HISTORY_MAX_LENGTH_3FINGERS // 2:
             self.activate_eraser("Stroke")
             return True
+        # if math.hypot(x - cx, y - cy) <= r:
+        #     self.activate_eraser("Stroke")
+        #     return True
         return False
 
     def check_clear_button_click(self, x, y):
         cx, cy = self.clear_button["center"]
         r = self.clear_button["radius"]
-        if math.hypot(x - cx, y - cy) < r:
+        button_counter = 0
+        for point in self.three_fingertip_history:
+            x = point[0]
+            y = point[1]
+            if math.hypot(x - cx, y - cy) <= r:
+                button_counter += 1
+        if button_counter > constants.HISTORY_MAX_LENGTH_3FINGERS // 2:
             self.clear_all_drawings()
             return True
+        # if math.hypot(x - cx, y - cy) < r:
+        #     self.clear_all_drawings()
+        #     return True
         return False
 
     def check_width_button_click(self, x, y):
         for circle in self.width_circles:
-            # if x > constants.BUTTON_RADIUS and x < threshold:
-            #     x = x - threshold
             cx, cy = circle["center"]
             r = circle["radius"]
-            dist = math.hypot(x - cx, y - cy)
-            if dist <= r:
+            button_counter = 0
+            for point in self.three_fingertip_history:
+                x = point[0]
+                y = point[1]
+                dist = math.hypot(x - cx, y - cy)
+                if dist <= r:
+                    button_counter += 1
+            if button_counter > constants.HISTORY_MAX_LENGTH_3FINGERS // 2:
                 self.set_width(circle["width"])
                 return True
+            # dist = math.hypot(x - cx, y - cy)
+            # if dist <= r:
+            #     self.set_width(circle["width"])
+            #     return True
         return False
 
     # ==============================
@@ -354,6 +399,7 @@ class DrawingApp:
         self.current_points = []
 
     def on_index_finger(self, x, y, frame):
+        self.three_fingertip_history = []
         # Add the current point to the stroke
         self.current_points.append((float(x), float(y)))
 
@@ -392,7 +438,10 @@ class DrawingApp:
         color_pressed = self.check_color_button_click(x, y)
         self.check_width_button_click(x, y)
         self.check_clear_button_click(x, y)
+
+        # For Debug
         #print(f"current color: {self.current_color}, current width: {self.current_width}, eraser mode: {self.eraser_mode},prev eraser mode: {self.prev_eraser_mode},last e-type:{self.last_eraser},eraser type: {self.eraser_type}")
+        #print(self.three_fingertip_history)
 
         # Color Changed - Update Color Button
         if color_pressed and self.prev_color != self.current_color and self.prev_color is not None:
@@ -400,7 +449,6 @@ class DrawingApp:
         # Color not changed but switched between eraser to color - Update Color Button
         elif color_pressed and self.prev_eraser_mode:
             self.create_buttons_overlay()
-
         elif self.eraser_mode and not self.prev_eraser_mode:
             self.create_buttons_overlay()
         elif (s_eraser_pressed or eraser_pressed) and (self.last_eraser!=self.eraser_type):
@@ -462,6 +510,12 @@ class DrawingApp:
     # SECTION: Fingertip Methods
     # ===========================
 
+    def update_3fingers_history(self):
+        new_tip = self.curr_fingertip
+        self.three_fingertip_history.append(new_tip)
+        if len(self.three_fingertip_history) > constants.HISTORY_MAX_LENGTH:
+            self.three_fingertip_history.pop(0)
+
     def stable_detect_fingertip(self, mask,history_size = constants.HISTORY_MAX_LENGTH):
         # Preprocess the mask to remove noise
         cleaned_mask = preprocess_mask(mask)
@@ -511,6 +565,7 @@ class DrawingApp:
             self.curr_fingertip = self.prev_fingertip
 
         return self.curr_fingertip
+
     # ========================
     # Eraser Methods
     # ========================
@@ -776,9 +831,12 @@ class DrawingApp:
                         frame_gui = self.on_index_finger(x, y, frame_gui)
         elif self.current_gesture == "three_fingers":
             #pos_x, pos_y = find_fingertip(mask_frame)
-            self.stable_detect_fingertip(mask_frame,constants.HISTORY_MAX_LENGTH_3FINGERS)
+            #self.stable_detect_fingertip(mask_frame,constants.HISTORY_MAX_LENGTH_3FINGERS)
+            self.stable_detect_fingertip(mask_frame)
+            #self.update_3fingers_history(pos_x, pos_y)
             if self.curr_fingertip:
                 pos_x,pos_y = self.curr_fingertip[0], self.curr_fingertip[1]
+                self.update_3fingers_history()
             cv2.circle(frame_gui, (int(pos_x), int(pos_y)), 10, (255, 255, 255), -1)
             self.on_hand_close()
             self.on_hand_3fingers(pos_x, pos_y)
