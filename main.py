@@ -7,11 +7,7 @@ from DrawSomething.offline_model import OfflineModel
 from DrawSomething.utils import bg_and_motion
 from DrawSomething.gesture_recognition import SvmModel, GestureStabilizer
 from DrawSomething.segmentation import HandSegmentation
-
-
-ONLINE_THRESHOLD = 0.8
-OFFLINE_THRESHOLD = 0.4
-VIDEO_SOURCE = 0
+from DrawSomething.constants import *
 
 
 def equalize_frame(frame):
