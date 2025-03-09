@@ -31,7 +31,7 @@ class DrawingApp:
     # ---------------------
     # init functions
     # ---------------------
-    def __init__(self, root):
+    def __init__(self, root,approve_word=None):
         # ---------
         # General
         # ---------
@@ -41,6 +41,12 @@ class DrawingApp:
         # self.screen_height = root.winfo_screenheight()
         #self.root.geometry(f"{self.screen_width // 2}x{self.screen_height}+0+0")
         self.root.geometry(f"{constants.FRAME_WIDTH}x{constants.FRAME_HEIGHT}+0+0")
+
+        self.chosen_word = approve_word
+        self.finish_button = tk.Button(root, text="Finish", command=self.finish_drawing,
+                                       font=("David", 20), bg="lightgreen", fg="black")
+        self.finish_button.pack(pady=10)
+
         # ---------
         # Video
         # ---------
@@ -106,6 +112,12 @@ class DrawingApp:
         self.mask = None
         self.create_buttons_overlay()
         self.eraser_partial_mask = np.zeros((constants.FRAME_HEIGHT, constants.FRAME_WIDTH), dtype=np.uint8)
+
+    def finish_drawing(self):
+        width = self.canvas.winfo_width()
+        height = self.canvas.winfo_height()
+        self.canvas.create_text(width // 2, height // 2, text=self.chosen_word,
+                                font=("Bauhaus 93", 72, "bold"), fill="salmon")
 
     # =============================
     # Buttons / UI Helpers
@@ -403,41 +415,53 @@ class DrawingApp:
                 "eraser": self.eraser_mode,
                 "abstracted": False
             }
+            if stroke_data["eraser"]:
+                stroke_data["width"] = 20
             self.drawn_strokes.append(stroke_data)
         self.current_points = []
+        self.draw_strokes_on_canvas()
 
-    def on_index_finger(self, x, y, frame):
-        self.three_fingertip_history = []
-        # Add the current point to the stroke
+    def on_index_finger(self, x, y, frame, original):
+
+        # Append the current point to the stroke
         self.current_points.append((float(x), float(y)))
+        e_mask = np.zeros((constants.FRAME_HEIGHT, constants.FRAME_WIDTH), dtype=np.uint8)
 
         # Eraser mode
         if self.eraser_mode:
             if self.eraser_type == "Stroke":
                 self.erase_all_stroke(x, y)
             else:
-                self.erase_partial_at_point(x, y)
+                # If there's only one point, use the single-point eraser function.
+                if len(self.current_points) == 1:
+                    e_mask = self.erase_partial_at_point(int(x), int(y))
+                else:
+                    # Erase over the stroke by processing all current points.
+                    e_mask = self.erase_partial_at_points(self.current_points)
+                # Optional: draw a line on the canvas for visual feedback in eraser mode.
+                if len(self.current_points) > 1:
+                    x1, y1 = self.current_points[-2]
+                    x2, y2 = self.current_points[-1]
+                    self.canvas.create_line(x1, y1, x2, y2, fill="white", width=20)
 
-            if len(self.current_points) > 1:
-                x1, y1 = self.current_points[-2]
-                x2, y2 = self.current_points[-1]
-                self.canvas.create_line(x1, y1, x2, y2, fill="white", width=20)
+            # Replace the erased regions on the frame with the original frame pixels
+            # Optionally draw a circle to indicate the current eraser position
+            cv2.circle(frame, (int(x), int(y)), 8, (128, 128, 128), -1)
+            frame[e_mask != 0] = original[e_mask != 0]
         else:
-            # Normal drawing (pen mode)
+            # Normal drawing mode: draw the stroke on the frame and canvas
+            self.eraser_partial_mask = np.zeros((constants.FRAME_HEIGHT, constants.FRAME_WIDTH), dtype=np.uint8)
+
             if len(self.current_points) > 1:
                 x1, y1 = self.current_points[-2]
                 x2, y2 = self.current_points[-1]
-                self.canvas.create_line(x1, y1, x2, y2, fill=list(self.current_color.keys())[0],
-                                        width=self.current_width)
+                self.canvas.create_line(x1, y1, x2, y2, fill=list(self.current_color.keys())[0],width=self.current_width)
 
-        if not self.eraser_mode:
-            if len(self.current_points) > 1:
                 pts = np.array(self.current_points, dtype=np.int32).reshape((-1, 1, 2))
                 color_bgr = constants.COLORS_OPTIONS[list(self.current_color.keys())[0]]
                 cv2.polylines(frame, [pts], isClosed=False, color=color_bgr, thickness=self.current_width)
             cv2.circle(frame, (int(x), int(y)), 8, constants.COLORS_OPTIONS[list(self.current_color.keys())[0]], -1)
-        else:
-            cv2.circle(frame, (int(x), int(y)), 8, (128,128,128), -1)
+
         return frame
 
     def on_hand_3fingers(self, x, y):
@@ -467,7 +491,7 @@ class DrawingApp:
     def on_hand_open(self):
         if self.prev_gesture != self.current_gesture:
             print("Undo...")
-            self.canvas.delete("all")
+            #self.canvas.delete("all")
 
             # Mark one more stroke as abstracted
             for i in range(len(self.drawn_strokes) - 1, -1, -1):
@@ -591,16 +615,33 @@ class DrawingApp:
                     self.draw_strokes_on_canvas()
                     break
 
-    def erase_partial_at_point(self, x, y, radius=10):
+    def erase_partial_at_point(self, x, y,radius=10):
+        mask = np.zeros((constants.FRAME_HEIGHT, constants.FRAME_WIDTH), dtype=np.uint8)
         if self.mask[y, x] == 0:
             self.eraser_partial_mask[y - radius // 2:y + radius // 2,
-                                     x - radius // 2:x + radius // 2] = 255
+                                      x - radius // 2:x + radius // 2] = 255
+            mask[y - radius // 2:y + radius // 2,
+            x - radius // 2:x + radius // 2] = 255
+        return mask
 
+    def erase_partial_at_points(self, points, radius=10):
+        mask = np.zeros((constants.FRAME_HEIGHT, constants.FRAME_WIDTH), dtype=np.uint8)
+        self.eraser_partial_mask = np.zeros((constants.FRAME_HEIGHT, constants.FRAME_WIDTH), dtype=np.uint8)
+        for point in points:
+            x = int(point[0])
+            y = int(point[1])
+            if self.mask[y, x] == 0:
+                mask[y - radius // 2: y + radius // 2, x - radius // 2: x + radius // 2] = 255
+                self.eraser_partial_mask[y - radius // 2:y + radius // 2,
+                x - radius // 2:x + radius // 2] = 255
+        return mask
     # ============================
     # Drawing Functions
     # ============================
 
     def draw_strokes_on_canvas(self):
+        self.canvas.delete("all")
+
         for stroke in self.drawn_strokes:
             points = stroke["points"]
             color = stroke["color"]
@@ -804,25 +845,40 @@ class DrawingApp:
         self.update_gesture(gesture_name)
 
         frame_gui = frame.copy()
-        frame_gui[self.mask != 0] = self.static_overlay[self.mask != 0] # draw Buttons
+        frame_gui[self.mask != 0] = self.static_overlay[self.mask != 0]     # draw Buttons
 
         if gesture_name == "up_thumb":
             gesture_name = "index_finger"
+
         print_gesture_on_frame(frame_gui, gesture_name)
         print_color_on_frame(frame_gui,list(self.current_color.keys())[0])
+
+        # Draw completed strokes
+        for stroke in self.drawn_strokes:
+            if stroke["eraser"]:
+                e_mask = self.erase_partial_at_points(stroke["points"])
+                frame_gui[e_mask != 0] = frame[e_mask != 0]  # eraser points
+            elif not stroke["eraser"]:
+                pts = np.array(stroke["points"], dtype=np.int32).reshape((-1, 1, 2))
+                color_bgr = constants.COLORS_OPTIONS[stroke["color"]]
+                cv2.polylines(frame_gui, [pts], isClosed=False, color=color_bgr, thickness=stroke["width"])
+
+        # Draw current stroke
+        if self.current_gesture == "index_finger" and len(self.current_points) > 1:
+            pts = np.array(self.current_points, dtype=np.int32).reshape((-1, 1, 2))
+            if not self.eraser_mode:
+                color_bgr = constants.COLORS_OPTIONS[list(self.current_color.keys())[0]]
+                cv2.polylines(frame_gui, [pts], isClosed=False, color=color_bgr, thickness=self.current_width)
 
         # Handle Gestures
         if self.current_gesture == "close_hand":
             self.on_hand_close()
             self.on_hand_thumbsup() # Now close hand is thumb up, we can use 3fingers as close hand for now
-        # THUMB UP AND INDEX FINGER ARE THE SAME
-        #elif self.current_gesture == "up_thumb":
-            #self.on_hand_close()
-            #self.on_hand_thumbsup()
+
         elif self.current_gesture == "open_hand":
             self.on_hand_close()
             self.on_hand_open()
-        # THUMB UP AND INDEX FINGER ARE THE SAME
+
         elif self.current_gesture == "index_finger" or self.current_gesture == "up_thumb":
             if self.kf_flag:
                 self.kf.stable_detect_fingertip(mask_frame)
@@ -832,19 +888,14 @@ class DrawingApp:
             if self.curr_fingertip:
                 x, y = self.curr_fingertip[0], self.curr_fingertip[1]
                 if x is not None and y is not None:
-                    # if y < 70 and x > 5:
-                    #     self.check_color_button_click(x, y)
-                    #     self.check_eraser_button_click(x, y)
-                    #     self.check_S_eraser_button_click(x, y)
-                    #     self.check_clear_button_click(x, y)
-                    # elif x < 70 and y > 80:
-                    #     self.check_width_button_click(x, y)
                     if not self.fingertip_down:
                         self.fingertip_down = True
                         self.current_points = [(float(x), float(y))]
                     else:
-                        frame_gui = self.on_index_finger(x, y, frame_gui)
+                        frame_gui = self.on_index_finger(x, y, frame_gui,frame)
+                        frame_gui[self.eraser_partial_mask != 0] = frame[self.eraser_partial_mask != 0]  # eraser points
         elif self.current_gesture == "three_fingers":
+            self.stable_detect_fingertip(mask_frame)
             pos_x, pos_y = fingertip_detection.find_fingertip(mask_frame)
             if self.kf_flag:
                 self.kf.stable_detect_fingertip(mask_frame,constants.HISTORY_MAX_LENGTH_3FINGERS)
@@ -858,15 +909,6 @@ class DrawingApp:
             cv2.circle(frame_gui, (int(pos_x), int(pos_y)), 10, (255, 255, 255), -1)
             self.on_hand_close()
             self.on_hand_3fingers(pos_x, pos_y)
-        #else:
-            #print("error - None gesture")
-
-        # Draw completed strokes
-        for stroke in self.drawn_strokes:
-            if not stroke["eraser"]:
-                pts = np.array(stroke["points"], dtype=np.int32).reshape((-1, 1, 2))
-                color_bgr = constants.COLORS_OPTIONS[stroke["color"]]
-                cv2.polylines(frame_gui, [pts], isClosed=False, color=color_bgr, thickness=stroke["width"])
 
         # Draw current stroke
         if self.current_gesture == "index_finger" and len(self.current_points) > 1:
@@ -878,7 +920,6 @@ class DrawingApp:
         frame_gui[self.eraser_partial_mask != 0] = frame[self.eraser_partial_mask != 0] # eraser points
         cv2.imshow("mask",mask_frame)
         cv2.imshow('GUI - DrawSomething Game', frame_gui)
-
         self.root.after(1, self.update_frame)
 
 # ============================
