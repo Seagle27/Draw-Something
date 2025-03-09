@@ -6,8 +6,11 @@ import tkinter as tk
 import math
 import cv2
 import numpy as np
+
+import DrawSomething
 from DrawSomething.segmentation import HandSegmentation
 from DrawSomething import gesture_recognition as gest
+from DrawSomething import kfFingerTracker as kf_tracker
 
 # Global Constants & Config
 from DrawSomething import constants
@@ -18,7 +21,7 @@ from DrawSomething.print_on_frame import print_gesture_on_frame,print_color_on_f
 from DrawSomething.fingertip_detection import find_fingertip,smooth_fingertip,is_valid_fingertip,detect_fingertip,preprocess_mask
 from DrawSomething.geometry_utils import rotate_point, chaikin_smoothing
 from DrawSomething.shape_detection import best_fit_shape
-
+from DrawSomething import fingertip_detection
 
 # =====================================
 # DrawingApp Class Definition
@@ -63,6 +66,11 @@ class DrawingApp:
         self.eraser_mode = False
         self.eraser_type = None  # can be "Normal" or "Stroke"
         self.stability_counter = 0
+
+        self.kf_flag = False
+        self.kf = kf_tracker.kfFingerTracker()
+        self.kf.initialize_kalman_filter()
+
         self.curr_fingertip = None
 
         # Drawing data
@@ -511,7 +519,10 @@ class DrawingApp:
     # ===========================
 
     def update_3fingers_history(self):
-        new_tip = self.curr_fingertip
+        if self.kf_flag:
+            new_tip = self.kf.curr_fingertip
+        else:
+            new_tip = self.curr_fingertip
         self.three_fingertip_history.append(new_tip)
         if len(self.three_fingertip_history) > constants.HISTORY_MAX_LENGTH:
             self.three_fingertip_history.pop(0)
@@ -813,7 +824,11 @@ class DrawingApp:
             self.on_hand_open()
         # THUMB UP AND INDEX FINGER ARE THE SAME
         elif self.current_gesture == "index_finger" or self.current_gesture == "up_thumb":
-            self.stable_detect_fingertip(mask_frame)
+            if self.kf_flag:
+                self.kf.stable_detect_fingertip(mask_frame)
+                self.curr_fingertip = self.kf.curr_fingertip
+            else:
+                self.stable_detect_fingertip(mask_frame)
             if self.curr_fingertip:
                 x, y = self.curr_fingertip[0], self.curr_fingertip[1]
                 if x is not None and y is not None:
@@ -830,10 +845,13 @@ class DrawingApp:
                     else:
                         frame_gui = self.on_index_finger(x, y, frame_gui)
         elif self.current_gesture == "three_fingers":
-            #pos_x, pos_y = find_fingertip(mask_frame)
-            #self.stable_detect_fingertip(mask_frame,constants.HISTORY_MAX_LENGTH_3FINGERS)
-            self.stable_detect_fingertip(mask_frame)
-            #self.update_3fingers_history(pos_x, pos_y)
+            pos_x, pos_y = fingertip_detection.find_fingertip(mask_frame)
+            if self.kf_flag:
+                self.kf.stable_detect_fingertip(mask_frame,constants.HISTORY_MAX_LENGTH_3FINGERS)
+                self.curr_fingertip = self.kf.curr_fingertip
+            else:
+                self.stable_detect_fingertip(mask_frame)
+                # self.update_3fingers_history(pos_x, pos_y)
             if self.curr_fingertip:
                 pos_x,pos_y = self.curr_fingertip[0], self.curr_fingertip[1]
                 self.update_3fingers_history()
@@ -858,6 +876,7 @@ class DrawingApp:
                 cv2.polylines(frame_gui, [pts], isClosed=False, color=color_bgr, thickness=self.current_width)
 
         frame_gui[self.eraser_partial_mask != 0] = frame[self.eraser_partial_mask != 0] # eraser points
+        cv2.imshow("mask",mask_frame)
         cv2.imshow('GUI - DrawSomething Game', frame_gui)
 
         self.root.after(1, self.update_frame)
