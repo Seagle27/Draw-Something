@@ -32,7 +32,7 @@ NON_SKIN_GMM = "data/raw/non_skin_gmm.joblib"
 # SVM model:
 SVM_MODEL_PATH = "data/raw/gesture_svm_model.pkl"
 NUM_GESTURES = 5
-file_names = ('index_finger', 'two_fingers', 'three_fingers', 'open_hand', 'nonsense')
+file_names = ('index_finger', 'two_fingers', 'three_fingers', 'open_hand','nonsense')
 
 # gesture recognition cfg:
 WIN_SIZE = 40

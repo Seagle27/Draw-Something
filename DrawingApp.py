@@ -52,7 +52,7 @@ class DrawingApp:
         # ---------
         self.cap = cv2.VideoCapture(0)
         self.mask_func = HandSegmentation(self.cap)
-
+        self.frame_counter = 0
         self.svm_model = gest.SvmModel(constants.SVM_MODEL_PATH)
         self.stabilizer = gest.GestureStabilizer(constants.WIN_SIZE, constants.MIN_CHANGE_FRAME)
 
@@ -73,7 +73,7 @@ class DrawingApp:
         self.eraser_type = None  # can be "Normal" or "Stroke"
         self.stability_counter = 0
 
-        self.kf_flag = False
+        self.kf_flag = True
         self.kf = kf_tracker.kfFingerTracker()
         self.kf.initialize_kalman_filter()
 
@@ -545,6 +545,8 @@ class DrawingApp:
     def update_3fingers_history(self):
         if self.kf_flag:
             new_tip = self.kf.curr_fingertip
+            if self.frame_counter < 200:
+                new_tip = self.curr_fingertip
         else:
             new_tip = self.curr_fingertip
         self.three_fingertip_history.append(new_tip)
@@ -834,15 +836,19 @@ class DrawingApp:
     def update_frame(self):
         ret, frame = self.cap.read()
         frame = cv2.flip(frame, 1)
-
+        self.frame_counter +=1
         if not ret:
             self.root.after(1, self.update_frame)
             return
 
         mask_frame = self.mask_func.proc_frame(frame)[0]
-        gesture_name = self.svm_model.predict(mask_frame)
-        gesture_name = self.stabilizer.update(gesture_name)
-        self.update_gesture(gesture_name)
+        try:
+            gesture_name = self.svm_model.predict(mask_frame)
+            gesture_name = self.stabilizer.update(gesture_name)
+            self.update_gesture(gesture_name)
+        except:
+            gesture_name = "nonsense"
+
 
         frame_gui = frame.copy()
         frame_gui[self.mask != 0] = self.static_overlay[self.mask != 0]     # draw Buttons
@@ -882,7 +888,10 @@ class DrawingApp:
         elif self.current_gesture == "index_finger" or self.current_gesture == "up_thumb":
             if self.kf_flag:
                 self.kf.stable_detect_fingertip(mask_frame)
-                self.curr_fingertip = self.kf.curr_fingertip
+                if self.frame_counter>200:
+                    self.curr_fingertip = self.kf.curr_fingertip
+                else:
+                    self.stable_detect_fingertip(mask_frame)
             else:
                 self.stable_detect_fingertip(mask_frame)
             if self.curr_fingertip:
@@ -899,7 +908,10 @@ class DrawingApp:
             pos_x, pos_y = fingertip_detection.find_fingertip(mask_frame)
             if self.kf_flag:
                 self.kf.stable_detect_fingertip(mask_frame,constants.HISTORY_MAX_LENGTH_3FINGERS)
-                self.curr_fingertip = self.kf.curr_fingertip
+                if self.frame_counter >200:
+                    self.curr_fingertip = self.kf.curr_fingertip
+                else:
+                    self.stable_detect_fingertip(mask_frame)
             else:
                 self.stable_detect_fingertip(mask_frame)
                 # self.update_3fingers_history(pos_x, pos_y)

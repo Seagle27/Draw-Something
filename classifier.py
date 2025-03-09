@@ -20,6 +20,7 @@ def preprocess_and_crop(binary_mask):
 
     # Largest contour => hand
     # cnt = max(contours, key=cv2.contourArea)
+
     x, y, w, h = cv2.boundingRect(binary_mask)
 
     # Crop
@@ -37,7 +38,6 @@ def extract_hog_features(mask):
     """
     # Ensure it's truly binary (0 or 255)
     _, mask = cv2.threshold(mask, 10, 255, cv2.THRESH_BINARY)
-
     # Preprocess and crop
     processed_mask = preprocess_and_crop(mask)
 
@@ -61,9 +61,13 @@ def load_gesture_data(file_path, label):
     X = []
     y = []
     for mask in masks:
-        feature = extract_hog_features(mask)
-        X.append(feature)
-        y.append(label)
+        try:
+            feature = extract_hog_features(mask)
+            X.append(feature)
+            y.append(label)
+        except Exception as err:
+            print("err on label: ", label)
+            continue
     return X, y
 
 
@@ -122,7 +126,7 @@ def load_all_gesture_data(base_dir, file_names):
     person_dirs = []
     X_all = []
     y_all = []
-    person_files = ["a","b"]
+    person_files = ["a", "b", "c", "d", "e", "f", "g", "h", "i"]
     for i,iFile in enumerate(person_files):
         person_dirs.append(os.path.join(base_dir, iFile))
     data = load_and_shuffle_gesture_data(person_dirs, file_names)
