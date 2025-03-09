@@ -29,7 +29,7 @@ class OfflineModel:
 
         return p_skin / (p_skin + p_non_skin + 1e-8)
 
-    def compute_offline_mask(self, frame):
+    def compute_offline_mask(self, frame, last_segmentation=None):
         """
         Given a BGR frame, compute skin segmentation using the offline GMM approach.
         Return a binary mask (H x W) of 0/255 indicating non-skin/skin.
@@ -50,6 +50,8 @@ class OfflineModel:
 
         # Lookup
         p_skin = self.prob_lut[i_indices, j_indices]  # shape [H,W]
+        if last_segmentation is not None:
+            p_skin += 0.1 * (last_segmentation > 0)
 
         # Threshold
         skin_mask = (p_skin > self.threshold).astype(np.uint8) * 255

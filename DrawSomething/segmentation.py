@@ -12,6 +12,7 @@ from DrawSomething.utils import bg_and_motion
 class HandSegmentation:
     BUFFER_LEN = 3
     HAND_BUFFER_LEN = 3
+
     def __init__(self, cap):
         self.background = self.capture_background(cap)
         self._face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + CASCADE_FACE_DETECTOR)
@@ -28,6 +29,7 @@ class HandSegmentation:
         self.hand_over_face_buffer = []
         self.face_template = {}
         self.last_bbox = None
+        self.last_segmentation = None
 
         self.bg_subtractor = cv2.createBackgroundSubtractorMOG2()
 
@@ -93,22 +95,13 @@ class HandSegmentation:
         face_area_mask = cv2.medianBlur(face_area_mask, 5)
         face_area_mask = face_area_mask * (self.face_mask > 0).astype(np.uint8)
 
-        # if self.face_mask is not None:
-        #     self.hand_over_face_buffer.append(face_area_mask)
-        #     if len(self.hand_over_face_buffer) > self.HAND_BUFFER_LEN:
-        #         self.hand_over_face_buffer.pop(0)
-        # if len(self.hand_over_face_buffer)>=3:
-        #     hand_mask_with_history = cv2.bitwise_or(cv2.bitwise_or(self.hand_over_face_buffer[0],
-        #                                             self.hand_over_face_buffer[0]),
-        #                                             self.hand_over_face_buffer[1])
-        # else:
-        #     hand_mask_with_history = face_area_mask
         not_face_area_mask = hybrid_mask * (self.face_mask == 0).astype(np.uint8)
 
         final_mask = cv2.bitwise_or(face_area_mask, not_face_area_mask)
         final_mask = cv2.medianBlur(final_mask, 5)
         final_hand_mask = self.fill_large_holes(final_mask)
         final_hand_mask = self.largest_contour_segmentation(final_hand_mask)
+        self.last_segmentation = final_hand_mask
         return final_hand_mask, motion_mask, hybrid_mask
 
         # Probability map and motion filters:
@@ -135,7 +128,7 @@ class HandSegmentation:
 
     def get_hybrid_mask(self, frame, frame_hsv):
         # mask_online, ratio_map_online = self.online_model.compute_online_mask(frame_hsv)
-        mask_offline, p_skin_offline = self.offline_model.compute_offline_mask(frame)
+        mask_offline, p_skin_offline = self.offline_model.compute_offline_mask(frame, self.last_segmentation)
         # return cv2.bitwise_and(mask_online, mask_offline), mask_online, mask_offline
         return mask_offline
 
