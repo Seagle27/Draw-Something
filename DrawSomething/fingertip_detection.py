@@ -6,6 +6,9 @@ fingertip detection - helper functions
 from DrawSomething import constants
 import cv2
 import numpy as np
+import numpy as np
+from filterpy.kalman import KalmanFilter
+
 
 def preprocess_mask(mask, kernel_size=3, iterations=1):
     """
@@ -18,6 +21,7 @@ def preprocess_mask(mask, kernel_size=3, iterations=1):
     # Morphological closing: closes small holes inside foreground objects
     cleaned = cv2.morphologyEx(cleaned, cv2.MORPH_CLOSE, kernel, iterations=iterations)
     return cleaned
+
 
 def find_fingertip(mask):
     _, thresh = cv2.threshold(mask, 127, 255, cv2.THRESH_BINARY)
@@ -56,19 +60,19 @@ def detect_fingertip(mask):
 
     max_distance = 0
     fingertip = None
-
-    # Scan hull points, choose farthest from centroid and above it
-    for point in hull[:, 0]:
-        x, y = point
-        # You can also try removing the "y > cy" check if you want the
-        # absolute farthest point in any direction. For a typical hand pose,
-        # ignoring points below the centroid often helps find the top fingertip.
-        if y > cy:
-            continue
-        distance = np.sqrt((x - cx) ** 2 + (y - cy) ** 2)
-        if distance > max_distance:
-            max_distance = distance
-            fingertip = (x, y)
+    fingertip = hull[hull[:, 0, 1].argmin()][0]
+    # # Scan hull points, choose farthest from centroid and above it
+    # for point in hull[:, 0]:
+    #     x, y = point
+    #     # You can also try removing the "y > cy" check if you want the
+    #     # absolute farthest point in any direction. For a typical hand pose,
+    #     # ignoring points below the centroid often helps find the top fingertip.
+    #     if y > cy:
+    #         continue
+    #     distance = np.sqrt((x - cx) ** 2 + (y - cy) ** 2)
+    #     if distance > max_distance:
+    #         max_distance = distance
+    #         fingertip = (x, y)
 
     return fingertip
 
@@ -115,3 +119,5 @@ def smooth_fingertip(curr_tip, prev_tip):
     x_smooth = int(alpha * curr_tip[0] + (1 - alpha) * prev_tip[0])
     y_smooth = int(alpha * curr_tip[1] + (1 - alpha) * prev_tip[1])
     return (x_smooth, y_smooth)
+
+
