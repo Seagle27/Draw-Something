@@ -871,7 +871,7 @@ class DrawingApp:
                 cv2.polylines(frame_gui, [pts], isClosed=False, color=color_bgr, thickness=self.current_width)
 
         # Handle Gestures
-        if self.current_gesture == "close_hand":
+        if self.current_gesture == "two_fingers":
             self.on_hand_close()
             self.on_hand_thumbsup() # Now close hand is thumb up, we can use 3fingers as close hand for now
 
