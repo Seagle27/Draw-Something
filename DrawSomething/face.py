@@ -191,7 +191,7 @@ def hysteresis_thresholding(img, low_thresh, high_thresh):
 
 def get_initial_face_mask(cap, face_cascade):
     print("Searching face...")
-    time.sleep(4)
+    time.sleep(7)
     discovered_face = False
     while not discovered_face:
         # Step A: Use first frame to prime hist

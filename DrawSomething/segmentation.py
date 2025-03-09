@@ -2,7 +2,7 @@ import numpy as np
 import cv2
 import time
 
-from DrawSomething import face
+from DrawSomething import face, fingertip_detection
 from DrawSomething.offline_model import OfflineModel
 from DrawSomething.online_model import OnlineModel
 from DrawSomething.constants import *
@@ -50,7 +50,7 @@ class HandSegmentation:
         frame_hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
         face_bbox = self.manage_face_detection_and_tracking(frame)
         if face_bbox is not None:
-            face_bbox = self.extend_bbox(face_bbox, frame.shape[:2], extend_ratio=(0.8, 0.3))
+            face_bbox = self.extend_bbox(face_bbox, frame.shape[:2], extend_ratio=(0.8, 0))
             self.last_bbox = face_bbox
             self.face_mask = self.bbox_to_mask(face_bbox, frame.shape[:2])
             face_mask_extended = self.bbox_to_mask(face_bbox, frame.shape[:2], (1.5, 1.5))
@@ -63,10 +63,6 @@ class HandSegmentation:
         hybrid_mask = self.get_hybrid_mask(frame, frame_hsv)
         hybrid_mask = cv2.morphologyEx(hybrid_mask, cv2.MORPH_CLOSE, kernel)
         hybrid_mask = cv2.bitwise_and(fg_mask, hybrid_mask)
-        # contours_count, _ = self.count_large_contours(hybrid_mask, min_area=500)
-        # print("contours count: ", contours_count)%
-        # new_hybrid_mask = cv2.bitwise_and(hybrid_mask, fg_frame)
-        # new_hybrid_mask = cv2.medianBlur(new_hybrid_mask, 3)
 
         updated_color_mask, current_face_gray = segment_hand_with_face_overlap(
             frame_bgr=frame,
@@ -102,7 +98,9 @@ class HandSegmentation:
         final_hand_mask = self.fill_large_holes(final_mask)
         final_hand_mask = self.largest_contour_segmentation(final_hand_mask)
         self.last_segmentation = final_hand_mask
-        return final_hand_mask, motion_mask, hybrid_mask, fg_mask
+        new_mask = self.edges_completion(frame, final_hand_mask)
+        new_mask = self.fill_large_holes(new_mask)
+        return new_mask, motion_mask, hybrid_mask, fg_mask
 
 
         # Probability map and motion filters:
@@ -347,6 +345,55 @@ class HandSegmentation:
         filled_mask = mask | inverted_flood_fill
 
         return filled_mask
+
+    def edges_completion(self, frame, hand_mask, roi_size=100, min_contour_area=50):
+        fingertip = fingertip_detection.detect_fingertip(hand_mask)
+        if fingertip is None:
+            return hand_mask
+        r = roi_size // 2
+        x0 = max(fingertip[0] - r, 0)
+        y0 = max(fingertip[1] - r, 0)
+        x1 = min(fingertip[0] + r, hand_mask.shape[1] - 1)
+        y1 = min(fingertip[1] + r, hand_mask.shape[0] - 1)
+
+        roi_mask = hand_mask[y0:y1, x0:x1].copy()
+        # Also get the corresponding ROI from the original frame (to run Canny on)
+        roi_frame = frame[y0:y1, x0:x1]
+        roi_gray = cv2.cvtColor(roi_frame, cv2.COLOR_BGR2GRAY)
+
+        # Apply Canny edge detection in the ROI
+        edges = cv2.Canny(roi_gray, 75, 125)
+
+        # Find contours in the edge image within ROI
+        edge_contours, _ = cv2.findContours(edges.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        if edge_contours:
+            # Choose the largest contour assuming it corresponds to the finger outline.
+            finger_contour = max(edge_contours, key=cv2.contourArea)
+
+            # Create a blank mask with the same dimensions as the ROI.
+            filled_mask = np.zeros_like(edges)
+
+            # Fill the area inside the contour.
+            cv2.fillPoly(filled_mask, [finger_contour], 255)
+
+        # Optionally, you might combine the fill with the original ROI mask:
+            roi_filled = cv2.bitwise_or(roi_mask, filled_mask)
+
+        # Place the filled ROI back into the original hand mask.
+            new_hand_mask = hand_mask.copy()
+            new_hand_mask[y0:y1, x0:x1] = roi_filled
+
+            return new_hand_mask
+
+        return hand_mask
+
+
+
+
+
+
+
 
 
 def segment_hand_with_face_overlap(
