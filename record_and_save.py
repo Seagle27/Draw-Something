@@ -4,7 +4,7 @@ import time
 from DrawSomething import segmentation
 
 # List of gestures and number of frames per gesture
-gestures = ['index_finger', 'up_thumb', 'open_hand', 'close_hand', 'three_fingers', 'nonsense']
+gestures = ['index_finger', 'open_hand', 'close_hand', 'three_fingers', 'nonsense']
 num_frames_per_gesture = 700
 # Open the webcam
 cap = cv2.VideoCapture(0)
@@ -37,7 +37,7 @@ for gesture in gestures:
         # Process the frame using your segmentation method
         # Assume segmentation_handler.proc_frame returns the following masks:
         # (hybrid_mask, motion_mask, fg_mask, final_mask, final_hand_mask)
-        final_hand_mask, motion_mask, hybrid_mask = segmentation_handler.proc_frame(frame)
+        final_hand_mask, motion_mask, hybrid_mask,_ = segmentation_handler.proc_frame(frame)
 
         # If a valid hand mask is found and we have passed an initial frame warm-up
         if frame_counter >= 100:

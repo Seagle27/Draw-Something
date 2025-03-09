@@ -120,8 +120,8 @@ def load_all_gesture_data(base_dir, file_names):
     person_dirs = []
     X_all = []
     y_all = []
-    person_files = ["x","y","z"]
-    file_names = ('index_finger', 'up_thumb', 'open_hand', 'close_hand', 'three_fingers','nonsense')
+    person_files = ["x","y","z","a","b","c"]
+    file_names = ('index_finger', 'open_hand', 'close_hand', 'three_fingers','nonsense')
     base_dir = "C:/BGU/Git/DrawSomething/data/recordings"
     for i,iFile in enumerate(person_files):
         person_dirs.append(os.path.join(base_dir, iFile))
@@ -188,7 +188,7 @@ def test_video(video_path, model):
 
 if __name__ == '__main__':
     base_dir = "C:/BGU/Git/DrawSomething/data"
-    file_names = ('index_finger', 'up_thumb', 'open_hand', 'close_hand', 'three_fingers')
+    file_names = ('index_finger', 'open_hand', 'close_hand', 'three_fingers','nonsense')
     X, y = load_all_gesture_data(base_dir, file_names)
     model = train(X, y)
     joblib.dump(model, os.path.join(base_dir,"raw","gesture_svm_model.pkl"))

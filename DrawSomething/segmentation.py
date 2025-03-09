@@ -31,7 +31,7 @@ class HandSegmentation:
 
         self.bg_subtractor = cv2.createBackgroundSubtractorMOG2()
 
-    def background_subtraction(self, frame, threshold=10):
+    def background_subtraction(self, frame, threshold=20):
         diff = cv2.absdiff(self.background, frame)
 
         # Convert difference to grayscale
@@ -109,7 +109,7 @@ class HandSegmentation:
         final_mask = cv2.medianBlur(final_mask, 5)
         final_hand_mask = self.fill_large_holes(final_mask)
         final_hand_mask = self.largest_contour_segmentation(final_hand_mask)
-        return final_hand_mask, motion_mask, hybrid_mask
+        return final_hand_mask, motion_mask, hybrid_mask, fg_mask
 
         # Probability map and motion filters:
         # # ___________________________________
@@ -141,7 +141,7 @@ class HandSegmentation:
 
 
     @staticmethod
-    def capture_background(cap, num_frames=30):
+    def capture_background(cap, num_frames=20):
         """
         Capture and compute an average background frame.
         Assumes the scene is static for the first 'num_frames' frames.
@@ -159,7 +159,7 @@ class HandSegmentation:
                 background = frame.astype("float")
             else:
                 # Accumulate weighted average
-                cv2.accumulateWeighted(frame, background, 0.1)
+                cv2.accumulateWeighted(frame, background, 1/num_frames)
         # Convert the accumulated background to an 8-bit image
         background = cv2.convertScaleAbs(background)
         return background

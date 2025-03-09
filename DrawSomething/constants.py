@@ -12,7 +12,7 @@ VIDEO_SOURCE = 0
 
 # Thresholds
 ONLINE_THRESHOLD = 0.5
-OFFLINE_THRESHOLD = 0.4
+OFFLINE_THRESHOLD = 0.35
 
 
 # Online model:
@@ -31,7 +31,7 @@ NON_SKIN_GMM = "data/raw/non_skin_gmm.joblib"
 
 # SVM model:
 SVM_MODEL_PATH = "data/raw/gesture_svm_model.pkl"
-NUM_GESTURES = 6
+NUM_GESTURES = 5
 # gesture recognition cfg:
 WIN_SIZE = 40
 MIN_CHANGE_FRAME = 10
