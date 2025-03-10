@@ -97,9 +97,9 @@ class HandSegmentation:
         final_mask = cv2.medianBlur(final_mask, 5)
         final_hand_mask = self.fill_large_holes(final_mask)
         final_hand_mask = self.largest_contour_segmentation(final_hand_mask)
-        self.last_segmentation = final_hand_mask
         new_mask = self.edges_completion(frame, final_hand_mask)
         new_mask = self.fill_large_holes(new_mask)
+        self.last_segmentation = new_mask
         return new_mask, motion_mask, hybrid_mask, fg_mask
 
 
