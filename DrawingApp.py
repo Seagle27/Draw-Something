@@ -73,7 +73,7 @@ class DrawingApp:
         self.eraser_type = None  # can be "Normal" or "Stroke"
         self.stability_counter = 0
 
-        self.kf_flag = True
+        self.kf_flag = False
         self.kf = kf_tracker.kfFingerTracker()
         self.kf.initialize_kalman_filter()
 
@@ -877,7 +877,7 @@ class DrawingApp:
                 cv2.polylines(frame_gui, [pts], isClosed=False, color=color_bgr, thickness=self.current_width)
 
         # Handle Gestures
-        if self.current_gesture == "two_fingers":
+        if self.current_gesture == "closed_hand":
             self.on_hand_close()
             self.on_hand_thumbsup() # Now close hand is thumb up, we can use 3fingers as close hand for now
 

@@ -126,7 +126,7 @@ def load_all_gesture_data(base_dir, file_names):
     person_dirs = []
     X_all = []
     y_all = []
-    person_files = ["a", "b", "c", "d", "e", "f", "g", "h", "i"]
+    person_files = ["a", "b", "c", "d", "e", "f", "g", "h"]
     for i,iFile in enumerate(person_files):
         person_dirs.append(os.path.join(base_dir, iFile))
     data = load_and_shuffle_gesture_data(person_dirs, file_names)
